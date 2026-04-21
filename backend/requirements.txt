@@ -1,0 +1,34 @@
+# ── Web framework ──────────────────────────────────────────────────
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+aiofiles==23.2.1
+
+# ── Base de datos ──────────────────────────────────────────────────
+sqlalchemy==2.0.30
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+# ── Schemas / validación ───────────────────────────────────────────
+pydantic[email]==2.7.1
+pydantic-settings==2.2.1
+
+# ── OCR (torch se instala antes por separado) ──────────────────────
+easyocr==1.7.1
+
+# ── Video / imagen ─────────────────────────────────────────────────
+opencv-python==4.9.0.80
+pillow>=10.0.0
+numpy>=1.24.0
+
+# ── Audio ──────────────────────────────────────────────────────────
+librosa>=0.10.0
+pydub==0.25.1
+webrtcvad-wheels==2.0.14
+
+# ── PDF ────────────────────────────────────────────────────────────
+reportlab==4.2.0
+
+# ── Utilidades ─────────────────────────────────────────────────────
+python-dotenv==1.0.1
+httpx==0.27.0

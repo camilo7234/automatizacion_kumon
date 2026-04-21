@@ -1,0 +1,117 @@
+# ════════════════════════════════════════════════════════════════
+# .gitignore - Archivos que NO se suben a Git
+# ════════════════════════════════════════════════════════════════
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment (reforzado)
+venv/
+.venv
+backend/venv/
+backend/.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Bases de datos
+*.db
+*.sqlite
+*.sqlite3
+
+# Videos (no guardar)
+uploads/videos/
+*.mp4
+*.avi
+*.mov
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node (si usamos frontend después)
+node_modules/
+npm-debug.log
+
+# Archivos SQL locales (no subir scripts con datos sensibles)
+*.session.sql
+
+# Carpeta de PDFs generados
+generated_pdfs/
+uploads/
+
+# ════════════════════════════════════════════════════════════════
+# ARCHIVOS GRANDES / BINARIOS (evitar subir librerías pesadas)
+# ════════════════════════════════════════════════════════════════
+# Binarios de Python compilados (C extensions)
+*.pyd
+*.dll
+*.lib
+*.so
+*.dylib
+
+# Torch / PyTorch (archivos enormes)
+*.pt
+*.pth
+*.bin
+
+# OpenCV
+cv2*.pyd
+cv2*.dll
+
+# LLVM
+llvmlite*.dll
+
+# Otros binarios comunes
+*.exe
+*.msi
+*.dmg
+
+# Modelos de machine learning (si los hay)
+*.h5
+*.keras
+*.onnx
+*.pb
+
+# Comprime tu entorno virtual localmente, nunca lo subas
+# En su lugar, usa requirements.txt

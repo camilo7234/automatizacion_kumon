@@ -1,0 +1,45 @@
+automatizacion_kumon/
+├── frontend/
+│   └── index.html                          ← SPA monolítica (2078 líneas, HTML+CSS+JS)
+├── backend/
+│   ├── app/
+│   │   ├── main.py                         ← Entrypoint FastAPI
+│   │   ├── routes/
+│   │   │   ├── upload.py                   ← POST /api/v1/upload/video
+│   │   │   ├── jobs.py                     ← GET /api/v1/jobs/{id}
+│   │   │   ├── results.py                  ← GET /api/v1/results/{id}
+│   │   │   └── cuestionario.py             ← GET/POST /api/v1/cuestionario/{id}
+│   │   ├── schemas/
+│   │   │   ├── __init__.py                 ← Exportaciones públicas del paquete
+│   │   │   ├── upload.py                   ← VideoUploadForm (Pydantic)
+│   │   │   ├── job.py                      ← ProcessingJobResponse (Pydantic)
+│   │   │   ├── result.py                   ← TestResultResponse (Pydantic)
+│   │   │   └── cuestionario.py             ← Schemas del cuestionario (Pydantic)
+│   │   └── services/
+│   │       ├── __init__.py                 ← Exportaciones públicas del paquete
+│   │       ├── video_processor.py          ← Análisis CV2 frame a frame
+│   │       ├── ocr_service.py              ← EasyOCR sobre frame resumen
+│   │       ├── audio_analyzer.py           ← VAD + speech rate
+│   │       ├── qualitative_analyzer.py     ← Orquestador señales cualitativas
+│   │       ├── processing_service.py       ← Orquestador del pipeline completo
+│   │       ├── result_calculator.py        ← Semáforo + starting point
+│   │       ├── report_generator.py         ← Generación boletín PDF
+│   │       └── face_analyzer.py            ← Stub cámara frontal (FUTURO)
+│   ├── config/
+│   │   ├── __init__.py                     ← Módulo vacío o mínimo
+│   │   ├── settings.py                     ← Pydantic Settings desde .env
+│   │   ├── database.py                     ← Engine SQLAlchemy + get_db()
+│   │   └── cuestionarios.py                ← Motor declarativo de cuestionarios (2017 líneas)
+│   ├── database/
+│   │   ├── BD_kumon_v2.sql                 ← DDL completo PostgreSQL
+│   │   └── models.py                       ← ORM SQLAlchemy (10 tablas, 3 schemas)
+│   ├── uploads/
+│   │   ├── videos/                         ← Videos subidos (ignorados en git)
+│   │   └── processed/                      ← Videos procesados (ignorados en git)
+│   ├── .env                                ← Variables de entorno (ignorado en git)
+│   ├── alembic.ini                         ← Configuración de migraciones
+│   ├── debug_summary_frame.jpg             ← Frame de debug OCR (artefacto de prueba)
+│   ├── PRUEBA.PY                           ← Script de prueba manual OpenCV
+│   └── requirements.txt                   ← 27 dependencias con versiones fijas
+├── .gitignore
+└── estructura.txt
