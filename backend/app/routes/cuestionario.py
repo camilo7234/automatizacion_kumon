@@ -211,6 +211,7 @@ def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
 # POST /cuestionario/{result_id}
 # ──────────────────────────────────────────────────────────────
 
+
 @router.post(
     "/cuestionario/{result_id}",
     response_model=CuestionarioSubmitResponse,
@@ -232,8 +233,10 @@ def submit_cuestionario(
             detail="Resultado no encontrado.",
         )
 
+
     template = _get_template_or_409(result)
     qual = _get_qualitative_result(db, result)
+
 
     final_respuestas = _build_final_respuestas(
         payload_respuestas=payload.respuestas,
@@ -241,17 +244,20 @@ def submit_cuestionario(
     )
     respuestas_para_calculo = _flatten_respuestas(final_respuestas)
 
+
     if not respuestas_para_calculo:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se recibieron respuestas para calcular el cuestionario.",
         )
 
+
     calc = calcular_puntaje_cualitativo(
         subject=template.subject,
         test_code=template.code,
         respuestas=respuestas_para_calculo,
     )
+
 
     obs = (
         db.query(ObservacionCualitativa)
@@ -261,21 +267,39 @@ def submit_cuestionario(
     if not obs:
         obs = ObservacionCualitativa(id_result=result.id_result)
 
+
+    mapper_attrs = set(type(obs).__mapper__.attrs.keys())
+
+
     obs.subject = template.subject
     obs.test_code = template.code
     obs.respuestas = final_respuestas
-    obs.puntaje_cualitativo = calc["total_porcentaje"]
-    obs.etiqueta_cualitativa = calc["etiqueta_total"]
-    obs.detalle_secciones = calc["secciones"]
-    obs.completado = True
+
+    if "puntaje_cualitativo" in mapper_attrs:
+        obs.puntaje_cualitativo = calc["total_porcentaje"]
+    if "etiqueta_cualitativa" in mapper_attrs:
+        obs.etiqueta_cualitativa = calc["etiqueta_total"]
+    if "detalle_secciones" in mapper_attrs:
+        obs.detalle_secciones = calc["secciones"]
+    if "completado" in mapper_attrs:
+        obs.completado = True
+    if "esta_completo" in mapper_attrs:
+        obs.esta_completo = True
+
     obs.completado_por = payload.completado_por
     obs.completado_at = datetime.now(timezone.utc)
-    obs.observacion_libre = payload.observacion_libre
-    obs.correcciones_orientador = payload.correcciones_orientador or {}
+
+    if "observacion_libre" in mapper_attrs:
+        obs.observacion_libre = payload.observacion_libre
+    if "correcciones_orientador" in mapper_attrs:
+        obs.correcciones_orientador = payload.correcciones_orientador or {}
+
     db.add(obs)
+
 
     db.commit()
     db.refresh(obs)
+
 
     return CuestionarioSubmitResponse(
         observacion_id=obs.id_observacion,
@@ -291,12 +315,16 @@ def submit_cuestionario(
 # GET /boletin/{result_id}
 # ──────────────────────────────────────────────────────────────
 
+
 @router.get("/boletin/{result_id}", response_model=BoletinResponse)
 def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
     """
     Retorna el boletín consolidado:
-      - Si existe en tabla Bulletin, lo usa como fuente principal.
-      - Si no existe, lo construye en caliente con report_generator.
+      - Si existe en tabla Bulletin con datos_boletin completo, lo sirve
+        directamente sin recalcular ni modificar nada en BD.
+      - Si no existe o está incompleto, lo construye con report_generator,
+        lo persiste y lo retorna.
+
 
     En ambos casos retorna:
       - cuantitativo
@@ -315,18 +343,33 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
             detail="Resultado no encontrado.",
         )
 
+
     template = _get_template_or_409(result)
+
 
     obs = (
         db.query(ObservacionCualitativa)
         .filter(ObservacionCualitativa.id_result == result.id_result)
         .first()
     )
-    if not obs or not obs.esta_completo:
+
+    esta_completo = bool(
+        obs
+        and (
+            getattr(obs, "esta_completo", False)
+            or (
+                getattr(obs, "respuestas", None)
+                and getattr(obs, "completado_at", None) is not None
+            )
+        )
+    )
+
+    if not esta_completo:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="El boletín solo está disponible cuando el cuestionario cualitativo está completo.",
         )
+
 
     bulletin = (
         db.query(Bulletin)
@@ -334,16 +377,42 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         .first()
     )
 
+
+    # ── Early return: si el boletín ya fue generado, servirlo directamente ──
+    # No se recalcula, no se escribe en BD, no se pisa generated_at.
+    # La verdad persistida en Bulletin es la fuente final.
+    if bulletin and bulletin.datos_boletin:
+        datos = bulletin.datos_boletin
+        return BoletinResponse(
+            boletin_id=bulletin.id_bulletin,
+            result_id=result.id_result,
+            subject=template.subject,
+            test_code=template.code,
+            status=bulletin.status,
+            generated_at=bulletin.generated_at,
+            cuantitativo=datos.get("cuantitativo", {}),
+            cualitativo=datos.get("cualitativo", {}),
+            combinado=datos.get("combinado", {}),
+            gaze=datos.get("gaze"),
+            message="Boletín generado correctamente.",
+        )
+
+
+    # ── Generación: solo llega aquí si bulletin no existe o no tiene datos ──
     qual = _get_qualitative_result(db, result)
 
+    puntaje_cualitativo = getattr(obs, "puntaje_cualitativo", None)
+    etiqueta_cualitativa = getattr(obs, "etiqueta_cualitativa", None)
+    detalle_secciones = getattr(obs, "detalle_secciones", None)
+
     if (
-        obs.puntaje_cualitativo is not None
-        and obs.etiqueta_cualitativa
-        and obs.detalle_secciones is not None
+        puntaje_cualitativo is not None
+        and etiqueta_cualitativa
+        and detalle_secciones is not None
     ):
-        total_porcentaje = float(obs.puntaje_cualitativo)
-        etiqueta_total = obs.etiqueta_cualitativa
-        secciones = obs.detalle_secciones
+        total_porcentaje = float(puntaje_cualitativo)
+        etiqueta_total = etiqueta_cualitativa
+        secciones = detalle_secciones
     else:
         try:
             calc = calcular_puntaje_cualitativo(
@@ -357,12 +426,15 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
                 detail=f"No fue posible calcular el boletín cualitativo: {exc}",
             ) from exc
 
+
         total_porcentaje = float(calc["total_porcentaje"])
         etiqueta_total = calc["etiqueta_total"]
         secciones = calc["secciones"]
 
+
     # Obtener el job para usar la fecha oficial de carga del video
     job = result.job
+
 
     qnt = QuantitativeInput(
         subject=template.subject,
@@ -381,6 +453,7 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         recommendation=result.recommendation,
     )
 
+
     cual_input = QualitativeInput(
         total_porcentaje=total_porcentaje,
         etiqueta_total=etiqueta_total,
@@ -390,13 +463,16 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
     )
 
+
     datos = build_report_data(qnt, cual_input)
+
 
     if not bulletin:
         bulletin = Bulletin(
             id_result=result.id_result,
             id_template=result.id_template,
         )
+
 
     bulletin.datos_boletin = datos
     bulletin.puntaje_cuantitativo = datos.get("cuantitativo", {}).get("score_index")
@@ -406,9 +482,11 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
     bulletin.status = "ready"
     bulletin.generated_at = datetime.now(timezone.utc)
 
+
     db.add(bulletin)
     db.commit()
     db.refresh(bulletin)
+
 
     return BoletinResponse(
         boletin_id=bulletin.id_bulletin,

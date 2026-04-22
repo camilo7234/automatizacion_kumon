@@ -65,13 +65,13 @@ PAGE_CHANGE_IGNORE_WINDOW_MS = 1200
 # Detección de escritura
 WRITING_DIFF_THRESHOLD = 12
 WRITING_MIN_ACTIVE_PIXELS = 100
-PAUSE_MIN_DURATION_MS = 8000
+PAUSE_MIN_DURATION_MS = 10000
 
 # ROI barra de herramientas (borrador)
-TOOLBAR_ROI_X1_PCT = 0.83
+TOOLBAR_ROI_X1_PCT = 0.75
 TOOLBAR_ROI_Y1_PCT = 0.00
-TOOLBAR_ROI_X2_PCT = 1.00
-TOOLBAR_ROI_Y2_PCT = 0.11
+TOOLBAR_ROI_X2_PCT = 0.98
+TOOLBAR_ROI_Y2_PCT = 0.14
 
 # ROI resumen final
 SUMMARY_ROI_X1_PCT = 0.08
@@ -1759,15 +1759,18 @@ def _is_eraser_active(frame: np.ndarray) -> bool:
 
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-    orange_mask = cv2.inRange(hsv, np.array([5, 90, 80]), np.array([25, 255, 255]))
-    red_mask_1 = cv2.inRange(hsv, np.array([0, 90, 80]), np.array([10, 255, 255]))
-    red_mask_2 = cv2.inRange(hsv, np.array([170, 90, 80]), np.array([180, 255, 255]))
+    blue_mask = cv2.inRange(hsv, np.array([95, 70, 35]), np.array([125, 255, 180]))
+    cyan_mask = cv2.inRange(hsv, np.array([80, 35, 120]), np.array([110, 255, 255]))
+    white_mask = cv2.inRange(hsv, np.array([0, 0, 180]), np.array([180, 45, 255]))
 
-    mask = cv2.bitwise_or(orange_mask, cv2.bitwise_or(red_mask_1, red_mask_2))
-    colored_ratio = int(np.count_nonzero(mask)) / (mask.size or 1)
+    blue_ratio = int(np.count_nonzero(blue_mask)) / (blue_mask.size or 1)
+    cyan_ratio = int(np.count_nonzero(cyan_mask)) / (cyan_mask.size or 1)
+    white_ratio = int(np.count_nonzero(white_mask)) / (white_mask.size or 1)
 
-    return colored_ratio >= 0.020
-
+    return (
+        (blue_ratio >= 0.030 and cyan_ratio >= 0.004)
+        or (white_ratio >= 0.025 and cyan_ratio >= 0.003)
+    )
 
 # ══════════════════════════════════════════════════════════════════
 # BLOQUE 10 — TIEMPO POR SECCIÓN

@@ -142,7 +142,7 @@ def _to_float(value: Any) -> Optional[float]:
 
 def _normalize_weight(value: Any, default: float) -> float:
     parsed = _to_float(value)
-    if parsed is None or parsed < 0:
+    if parsed is None or parsed <= 0:
         return default
     return parsed
 
@@ -308,8 +308,16 @@ def _build_combinado_block(
             "narrativa": narrative,
         }
 
+    datos_incompletos = False
     if score_cuant is None or score_cual is None:
-        combined_score = None
+        datos_incompletos = True
+        # Calcular con lo que hay, solo si al menos uno está disponible
+        if score_cuant is not None:
+            combined_score = round(weight_cuant * score_cuant, 1)
+        elif score_cual is not None:
+            combined_score = round(weight_cual * score_cual, 1)
+        else:
+            combined_score = None
     else:
         combined_score = round(
             weight_cuant * score_cuant + weight_cual * score_cual,
@@ -327,6 +335,7 @@ def _build_combinado_block(
     return {
         "puntaje":   combined_score,
         "etiqueta":  etiqueta,
+        "datos_incompletos": datos_incompletos,
         "kpi": {
             "cuantitativo": {
                 "puntaje": score_cuant,

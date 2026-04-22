@@ -1,4 +1,5 @@
 """
+══════════════════════════════════════════════════════════════════
 app/schemas/cuestionario.py
 ══════════════════════════════════════════════════════════════════
 Schemas del formulario cualitativo del orientador.
@@ -9,13 +10,17 @@ Usado en:
 ══════════════════════════════════════════════════════════════════
 """
 
+
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
 
 from pydantic import BaseModel, UUID4, Field, field_validator
 
 
+
 # ── GET /api/v1/cuestionario/{result_id} ─────────────────────────
+
 
 
 class CuestionarioResponse(BaseModel):
@@ -26,6 +31,7 @@ class CuestionarioResponse(BaseModel):
     - cuestionario: dict con escala, secciones, prefills y auto_flags.
     - prefill_flags: lista de claves detectadas automáticamente.
     """
+
 
     result_id: UUID4
     subject: str
@@ -40,10 +46,13 @@ class CuestionarioResponse(BaseModel):
         description="Claves de métricas ya capturadas automáticamente por el sistema",
     )
 
+
     model_config = {"from_attributes": True}
 
 
+
 # ── POST /api/v1/cuestionario/{result_id} — Request ──────────────
+
 
 
 class RespuestaCuestionarioRequest(BaseModel):
@@ -73,9 +82,12 @@ class RespuestaCuestionarioRequest(BaseModel):
     El validador normaliza ambas formas a un dict plano por métrica.
     """
 
+
     respuestas: Dict[str, Any]
     completado_por: str = Field(min_length=2, description="Nombre del orientador")
     observacion_libre: Optional[str] = None
+    correcciones_orientador: Dict[str, Any] = Field(default_factory=dict)
+
 
     @field_validator("respuestas", mode="before")
     @classmethod
@@ -83,12 +95,15 @@ class RespuestaCuestionarioRequest(BaseModel):
         if not isinstance(v, dict) or not v:
             raise ValueError("respuestas no puede estar vacío")
 
+
         normalizadas: Dict[str, Any] = {}
+
 
         for key, value in v.items():
             if isinstance(value, dict) and "valor" in value:
                 normalizadas[key] = value
                 continue
+
 
             if isinstance(value, dict):
                 for subkey, subvalue in value.items():
@@ -96,10 +111,13 @@ class RespuestaCuestionarioRequest(BaseModel):
             else:
                 normalizadas[key] = value
 
+
         if not normalizadas:
             raise ValueError("respuestas no puede estar vacío")
 
+
         return normalizadas
+
 
     @field_validator("completado_por")
     @classmethod
@@ -108,6 +126,7 @@ class RespuestaCuestionarioRequest(BaseModel):
         if len(v) < 2:
             raise ValueError("completado_por debe tener al menos 2 caracteres")
         return v
+
 
     @field_validator("observacion_libre")
     @classmethod
@@ -118,17 +137,31 @@ class RespuestaCuestionarioRequest(BaseModel):
         return v or None
 
 
+    @field_validator("correcciones_orientador", mode="before")
+    @classmethod
+    def normalizar_correcciones_orientador(cls, v: Any) -> Dict[str, Any]:
+        if v is None:
+            return {}
+        if not isinstance(v, dict):
+            raise ValueError("correcciones_orientador debe ser un objeto")
+        return v
+
+
+
 # ── POST /api/v1/cuestionario/{result_id} — Response ─────────────
+
 
 
 class SeccionPuntaje(BaseModel):
     """Puntaje de una sección individual del formulario."""
+
 
     id: str
     nombre: str
     puntaje: float = Field(ge=0, le=100)
     etiqueta: str
     preguntas: int = Field(ge=0)
+
 
 
 class CuestionarioSubmitResponse(BaseModel):
@@ -142,6 +175,7 @@ class CuestionarioSubmitResponse(BaseModel):
        0-25  → atencion
     """
 
+
     observacion_id: Optional[UUID4] = None
     result_id: UUID4
     total_porcentaje: float = Field(ge=0, le=100)
@@ -150,13 +184,16 @@ class CuestionarioSubmitResponse(BaseModel):
     boletin_habilitado: bool = True
     message: str = "Cuestionario cualitativo guardado correctamente."
 
+
     model_config = {
         "from_attributes": True,
         "populate_by_name": True,
     }
 
 
+
 # ── GET /api/v1/boletin/{result_id} ──────────────────────────────
+
 
 
 class BoletinResponse(BaseModel):
@@ -170,6 +207,7 @@ class BoletinResponse(BaseModel):
       - gaze
     """
 
+
     boletin_id: Optional[UUID4] = None
     result_id: UUID4
     subject: str
@@ -181,5 +219,6 @@ class BoletinResponse(BaseModel):
     combinado: Dict[str, Any] = Field(default_factory=dict)
     gaze: Optional[Dict[str, Any]] = None
     message: str = "Boletín generado correctamente."
+
 
     model_config = {"from_attributes": True}

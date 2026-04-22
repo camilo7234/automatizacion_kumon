@@ -61,7 +61,13 @@ CONFIDENCE_THRESHOLDS = {
     "concentracion_visual": 0.72,
     "postura_distancia":    0.68,
 }
-
+# NUEVO — entre ALWAYS_MANUAL y CONFIDENCE_THRESHOLDS
+# Métricas capturadas automáticamente que SIEMPRE requieren
+# confirmación visual del orientador (aparecen pre-marcadas)
+ALWAYS_CONFIRM = {
+    "num_reescrituras",
+    "pausas_largas",
+}
 # Métricas que SIEMPRE requieren al orientador — nunca automáticas
 ALWAYS_MANUAL = {
     "postura",
@@ -686,6 +692,8 @@ def _register_metric(
     """
     Registra una métrica en prefills y, si la confianza es
     suficiente y no es ALWAYS_MANUAL, la agrega a auto_captured_flags.
+    Si la métrica está en ALWAYS_CONFIRM, va al formulario pre-marcada
+    aunque la confianza supere el umbral.
 
     Args:
         key:       clave de la métrica
@@ -708,6 +716,20 @@ def _register_metric(
 
     # Solo agregar a auto_captured_flags si supera el umbral
     if confianza >= threshold:
+        # ── NUEVO ─────────────────────────────────────────────────
+        # ALWAYS_CONFIRM: confianza alta pero requiere confirmación
+        # del orientador. Va al formulario con el valor pre-marcado.
+        # El prefill ya fue guardado arriba con el valor sugerido.
+        if key in ALWAYS_CONFIRM:
+            logger.debug(
+                "_register_metric | ALWAYS_CONFIRM | "
+                "métrica=%s | valor=%s | confianza=%.2f "
+                "→ formulario pre-marcado, orientador confirma",
+                key, valor, confianza,
+            )
+            return   # NO entra a auto_captured_flags
+        # ── FIN NUEVO ─────────────────────────────────────────────
+
         if key not in result.auto_captured_flags:
             result.auto_captured_flags.append(key)
             logger.debug(

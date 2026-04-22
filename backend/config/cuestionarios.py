@@ -1733,6 +1733,7 @@ def obtener_cuestionario_con_prefill(
             "concentracion", "mantiene_foco", "controla_tiempo",
             "planifica_tiempo", "no_abandona", "mantiene_constancia",
             "persistencia", "mantiene_esfuerzo", "trabaja_sin_distracciones",
+            "fluidez_calculo",
         ],
         "ritmo_trabajo": [
             "mantiene_ritmo", "termina_tareas", "termina_con_calma",
@@ -1746,6 +1747,7 @@ def obtener_cuestionario_con_prefill(
             "responde_con_rapidez_razonable",
             "fluidez_alta", "responde_con_facilidad",
             "escribe_con_mayor_fluidez", "detecta_patrones",
+            "division_2dig",
         ],
         "actividad_general": [
             "motivacion", "motivacion_independencia",
@@ -1755,9 +1757,9 @@ def obtener_cuestionario_con_prefill(
             "trabajo_autonomo_serio", "autonomia_en_prueba",
             "organiza_trabajo", "asume_reto",
             "toma_iniciativa", "confianza_responder",
+            "independencia", "afronta_retos",
         ],
     }
-
 
     # Invertir el mapeo: item_id → métricas relacionadas
     ITEM_A_METRICAS = {}
