@@ -856,6 +856,13 @@ class ObservacionCualitativa(Base):
     Relación con TestResult:
       unique=True → un resultado tiene máximo una observación cualitativa.
       uselist=False en TestResult.observacion_cualitativa.
+
+    NOTA esta_completo:
+      Existe como columna BOOLEAN en BD (escrita por submit_cuestionario)
+      Y como @property _esta_completo_calculado (validación en memoria
+      antes de flush, no requiere ir a BD).
+      Usar `obs.esta_completo` para leer el estado persistido.
+      Usar `obs._esta_completo_calculado` para validar antes de guardar.
     """
 
     __tablename__ = "observaciones_cualitativas"
@@ -873,9 +880,25 @@ class ObservacionCualitativa(Base):
 
     # Ver estructura detallada en el docstring del bloque
     respuestas     = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    completado_por = Column(Text)      # nombre del orientador
+    completado_por = Column(Text)        # nombre del orientador
     completado_at  = Column(TIMESTAMPTZ)
     created_at     = Column(TIMESTAMPTZ, nullable=False, server_default=text("NOW()"))
+
+    # ── Columnas agregadas en migración (ya existen en BD) ────────
+    # JUSTIFICACIÓN: estas columnas existen en processing.observaciones_cualitativas
+    # pero no estaban mapeadas en el ORM, por lo que SQLAlchemy las ignoraba
+    # y las guardas defensivas `if "X" in mapper_attrs` siempre fallaban.
+
+    puntaje_cualitativo  = Column(Numeric(5, 2))          # score formulario 0-100
+    etiqueta_cualitativa = Column(String(30))             # fortaleza|en_desarrollo|refuerzo|atencion
+    detalle_secciones    = Column(JSONB)                  # desglose por sección para el boletín
+    observacion_libre    = Column(Text)                   # comentario libre del orientador
+    correcciones_orientador = Column(                     # diff para módulo de aprendizaje
+        JSONB, server_default=text("'{}'::jsonb")
+    )
+    esta_completo = Column(                               # columna real, consultable en SQL
+        Boolean, nullable=False, server_default=text("false")
+    )
 
     # ── Relaciones ────────────────────────────────────────────────
     result = relationship(
@@ -886,10 +909,13 @@ class ObservacionCualitativa(Base):
 
     # ── Properties ───────────────────────────────────────────────
     @property
-    def esta_completo(self) -> bool:
+    def _esta_completo_calculado(self) -> bool:
         """
-        True si el orientador terminó el formulario.
-        Requiere respuestas no vacías Y timestamp de completado.
+        Validación en memoria: True si respuestas no vacías Y timestamp presente.
+        Usar antes de hacer flush para verificar que el objeto está listo
+        para persistirse con esta_completo=True.
+        NO leer este property para lógica de negocio post-guardado;
+        usar la columna `esta_completo` directamente.
         """
         return bool(self.respuestas) and self.completado_at is not None
 
@@ -925,7 +951,6 @@ class ObservacionCualitativa(Base):
             f"completo={self.esta_completo} "
             f"subject='{self.subject}' code='{self.test_code}'>"
         )
-
 
 # ──────────────────────────────────────────────────────────────────
 # BLOQUE 2.7 — Bulletin

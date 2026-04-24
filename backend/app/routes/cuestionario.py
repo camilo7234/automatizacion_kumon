@@ -211,7 +211,6 @@ def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
 # POST /cuestionario/{result_id}
 # ──────────────────────────────────────────────────────────────
 
-
 @router.post(
     "/cuestionario/{result_id}",
     response_model=CuestionarioSubmitResponse,
@@ -233,10 +232,8 @@ def submit_cuestionario(
             detail="Resultado no encontrado.",
         )
 
-
     template = _get_template_or_409(result)
     qual = _get_qualitative_result(db, result)
-
 
     final_respuestas = _build_final_respuestas(
         payload_respuestas=payload.respuestas,
@@ -244,20 +241,17 @@ def submit_cuestionario(
     )
     respuestas_para_calculo = _flatten_respuestas(final_respuestas)
 
-
     if not respuestas_para_calculo:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se recibieron respuestas para calcular el cuestionario.",
         )
 
-
     calc = calcular_puntaje_cualitativo(
         subject=template.subject,
         test_code=template.code,
         respuestas=respuestas_para_calculo,
     )
-
 
     obs = (
         db.query(ObservacionCualitativa)
@@ -267,39 +261,21 @@ def submit_cuestionario(
     if not obs:
         obs = ObservacionCualitativa(id_result=result.id_result)
 
-
-    mapper_attrs = set(type(obs).__mapper__.attrs.keys())
-
-
-    obs.subject = template.subject
-    obs.test_code = template.code
-    obs.respuestas = final_respuestas
-
-    if "puntaje_cualitativo" in mapper_attrs:
-        obs.puntaje_cualitativo = calc["total_porcentaje"]
-    if "etiqueta_cualitativa" in mapper_attrs:
-        obs.etiqueta_cualitativa = calc["etiqueta_total"]
-    if "detalle_secciones" in mapper_attrs:
-        obs.detalle_secciones = calc["secciones"]
-    if "completado" in mapper_attrs:
-        obs.completado = True
-    if "esta_completo" in mapper_attrs:
-        obs.esta_completo = True
-
-    obs.completado_por = payload.completado_por
-    obs.completado_at = datetime.now(timezone.utc)
-
-    if "observacion_libre" in mapper_attrs:
-        obs.observacion_libre = payload.observacion_libre
-    if "correcciones_orientador" in mapper_attrs:
-        obs.correcciones_orientador = payload.correcciones_orientador or {}
+    obs.subject              = template.subject
+    obs.test_code            = template.code
+    obs.respuestas           = final_respuestas
+    obs.puntaje_cualitativo  = calc["total_porcentaje"]
+    obs.etiqueta_cualitativa = calc["etiqueta_total"]
+    obs.detalle_secciones    = calc["secciones"]
+    obs.completado_por       = payload.completado_por
+    obs.completado_at        = datetime.now(timezone.utc)
+    obs.observacion_libre    = payload.observacion_libre
+    obs.correcciones_orientador = payload.correcciones_orientador or {}
+    obs.esta_completo        = obs._esta_completo_calculado
 
     db.add(obs)
-
-
     db.commit()
     db.refresh(obs)
-
 
     return CuestionarioSubmitResponse(
         observacion_id=obs.id_observacion,
@@ -310,11 +286,9 @@ def submit_cuestionario(
         boletin_habilitado=True,
         message="Cuestionario cualitativo guardado correctamente.",
     )
-
 # ──────────────────────────────────────────────────────────────
 # GET /boletin/{result_id}
 # ──────────────────────────────────────────────────────────────
-
 
 @router.get("/boletin/{result_id}", response_model=BoletinResponse)
 def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
@@ -324,7 +298,6 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         directamente sin recalcular ni modificar nada en BD.
       - Si no existe o está incompleto, lo construye con report_generator,
         lo persiste y lo retorna.
-
 
     En ambos casos retorna:
       - cuantitativo
@@ -343,9 +316,7 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
             detail="Resultado no encontrado.",
         )
 
-
     template = _get_template_or_409(result)
-
 
     obs = (
         db.query(ObservacionCualitativa)
@@ -353,16 +324,8 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         .first()
     )
 
-    esta_completo = bool(
-        obs
-        and (
-            getattr(obs, "esta_completo", False)
-            or (
-                getattr(obs, "respuestas", None)
-                and getattr(obs, "completado_at", None) is not None
-            )
-        )
-    )
+    # Acceso directo a la columna mapeada — getattr defensivo eliminado
+    esta_completo = bool(obs and obs.esta_completo)
 
     if not esta_completo:
         raise HTTPException(
@@ -370,13 +333,11 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
             detail="El boletín solo está disponible cuando el cuestionario cualitativo está completo.",
         )
 
-
     bulletin = (
         db.query(Bulletin)
         .filter(Bulletin.id_result == result.id_result)
         .first()
     )
-
 
     # ── Early return: si el boletín ya fue generado, servirlo directamente ──
     # No se recalcula, no se escribe en BD, no se pisa generated_at.
@@ -397,13 +358,13 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
             message="Boletín generado correctamente.",
         )
 
-
     # ── Generación: solo llega aquí si bulletin no existe o no tiene datos ──
     qual = _get_qualitative_result(db, result)
 
-    puntaje_cualitativo = getattr(obs, "puntaje_cualitativo", None)
-    etiqueta_cualitativa = getattr(obs, "etiqueta_cualitativa", None)
-    detalle_secciones = getattr(obs, "detalle_secciones", None)
+    # Acceso directo a columnas mapeadas — getattr defensivo eliminado
+    puntaje_cualitativo  = obs.puntaje_cualitativo
+    etiqueta_cualitativa = obs.etiqueta_cualitativa
+    detalle_secciones    = obs.detalle_secciones
 
     if (
         puntaje_cualitativo is not None
@@ -411,9 +372,12 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         and detalle_secciones is not None
     ):
         total_porcentaje = float(puntaje_cualitativo)
-        etiqueta_total = etiqueta_cualitativa
-        secciones = detalle_secciones
+        etiqueta_total   = etiqueta_cualitativa
+        secciones        = detalle_secciones
     else:
+        # Fallback: cubre registros anteriores a la migración que no
+        # tienen estos campos persistidos. Necesario mientras existan
+        # las 19 filas históricas sin recalcular.
         try:
             calc = calcular_puntaje_cualitativo(
                 subject=template.subject,
@@ -426,15 +390,12 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
                 detail=f"No fue posible calcular el boletín cualitativo: {exc}",
             ) from exc
 
-
         total_porcentaje = float(calc["total_porcentaje"])
-        etiqueta_total = calc["etiqueta_total"]
-        secciones = calc["secciones"]
-
+        etiqueta_total   = calc["etiqueta_total"]
+        secciones        = calc["secciones"]
 
     # Obtener el job para usar la fecha oficial de carga del video
     job = result.job
-
 
     qnt = QuantitativeInput(
         subject=template.subject,
@@ -453,7 +414,6 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         recommendation=result.recommendation,
     )
 
-
     cual_input = QualitativeInput(
         total_porcentaje=total_porcentaje,
         etiqueta_total=etiqueta_total,
@@ -463,9 +423,7 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
     )
 
-
     datos = build_report_data(qnt, cual_input)
-
 
     if not bulletin:
         bulletin = Bulletin(
@@ -473,20 +431,17 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
             id_template=result.id_template,
         )
 
-
-    bulletin.datos_boletin = datos
+    bulletin.datos_boletin        = datos
     bulletin.puntaje_cuantitativo = datos.get("cuantitativo", {}).get("score_index")
-    bulletin.puntaje_cualitativo = total_porcentaje
-    bulletin.puntaje_combinado = datos.get("combinado", {}).get("puntaje")
-    bulletin.etiqueta_combinada = datos.get("combinado", {}).get("etiqueta")
-    bulletin.status = "ready"
-    bulletin.generated_at = datetime.now(timezone.utc)
-
+    bulletin.puntaje_cualitativo  = total_porcentaje
+    bulletin.puntaje_combinado    = datos.get("combinado", {}).get("puntaje")
+    bulletin.etiqueta_combinada   = datos.get("combinado", {}).get("etiqueta")
+    bulletin.status               = "ready"
+    bulletin.generated_at         = datetime.now(timezone.utc)
 
     db.add(bulletin)
     db.commit()
     db.refresh(bulletin)
-
 
     return BoletinResponse(
         boletin_id=bulletin.id_bulletin,
@@ -501,6 +456,7 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         gaze=datos.get("gaze"),
         message="Boletín generado correctamente.",
     )
+
 
 # ──────────────────────────────────────────────────────────────
 # Helpers para generación de PDF
@@ -538,17 +494,12 @@ def _svg_gauge(pct: float, color: str, label: str) -> str:
     pct = max(0.0, min(100.0, float(pct or 0)))
     radius  = 54
     cx, cy  = 70, 70
-    # Ángulo de barrido: 180° = pct 100
     import math
     angle_deg = 180.0 * (pct / 100.0)
     angle_rad = math.radians(180 - angle_deg)
     end_x = cx + radius * math.cos(angle_rad)
     end_y = cy - radius * math.sin(angle_rad)
     large = 1 if angle_deg > 180 else 0
-
-    # Track gris de fondo (semicírculo completo)
-    track_end_x = cx + radius
-    track_start_x = cx - radius
 
     return f"""
     <svg width="140" height="80" viewBox="0 0 140 80" xmlns="http://www.w3.org/2000/svg">
@@ -587,11 +538,11 @@ def _svg_barra(secciones: list) -> str:
 
     items = []
     for i, sec in enumerate(secciones):
-        pct   = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
+        pct    = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
         nombre = str(sec.get("nombre") or sec.get("nombre_display") or f"Sección {i+1}")[:30]
-        color = _color_etiqueta(sec.get("etiqueta") or "")
-        y     = i * (bar_height + gap) + 5
-        bar_w = int((pct / 100.0) * bar_max_w)
+        color  = _color_etiqueta(sec.get("etiqueta") or "")
+        y      = i * (bar_height + gap) + 5
+        bar_w  = int((pct / 100.0) * bar_max_w)
         items.append(f"""
           <text x="{label_w - 6}" y="{y + bar_height - 4}"
                 text-anchor="end" font-family="Arial,sans-serif"
@@ -628,34 +579,33 @@ def _build_pdf_html(
     comb    = datos.get("combinado")    or {}
 
     # ── Datos cuantitativos ──────────────────────────────────────
-    pct_cuan      = float(cuan.get("score_index")   or cuan.get("percentage") or 0)
-    score_cuan    = float(cuan.get("score_index")   or 0)
-    semaforo      = str(cuan.get("semaforo")        or "").lower()
+    pct_cuan      = float(cuan.get("score_index")    or cuan.get("percentage") or 0)
+    score_cuan    = float(cuan.get("score_index")    or 0)
+    semaforo      = str(cuan.get("semaforo")         or "").lower()
     color_sem     = _color_semaforo(semaforo)
     correctas     = cuan.get("correct_answers", 0)
     total_preg    = cuan.get("total_questions", 0)
-    pct_bruta     = float(cuan.get("percentage")    or 0)
+    pct_bruta     = float(cuan.get("percentage")     or 0)
     study_time    = float(cuan.get("study_time_min") or 0)
     target_time   = float(cuan.get("target_time_min") or 0)
     ws            = cuan.get("ws") or template.code if template else ""
     test_date_raw = cuan.get("test_date") or (str(result.test_date) if result.test_date else "—")
-    nivel_actual  = cuan.get("current_level") or "—"
+    nivel_actual  = cuan.get("current_level")  or "—"
     punto_inicio  = cuan.get("starting_point") or "—"
     recom         = cuan.get("recommendation") or "—"
-    display_name  = cuan.get("display_name") or (template.display_name if template else "")
+    display_name  = cuan.get("display_name")   or (template.display_name if template else "")
 
     gauge_cuan = _svg_gauge(score_cuan, color_sem, "Índice cuantitativo")
 
     # ── Datos cualitativos ───────────────────────────────────────
-    pct_cual      = float(cual.get("total_porcentaje") or cual.get("puntaje") or 0)
-    etq_cual      = cual.get("etiqueta_total") or "—"
-    color_cual    = _color_etiqueta(etq_cual)
-    secciones_q   = cual.get("secciones") or []
+    pct_cual    = float(cual.get("total_porcentaje") or cual.get("puntaje") or 0)
+    etq_cual    = cual.get("etiqueta_total") or "—"
+    color_cual  = _color_etiqueta(etq_cual)
+    secciones_q = cual.get("secciones") or []
 
-    gauge_cual = _svg_gauge(pct_cual, color_cual, "Índice cualitativo")
+    gauge_cual  = _svg_gauge(pct_cual, color_cual, "Índice cualitativo")
     barras_html = _svg_barra(secciones_q)
 
-    # Flags observados
     auto_flags: list = cual.get("auto_flags") or []
     flags_html = ""
     if auto_flags:
@@ -689,8 +639,7 @@ def _build_pdf_html(
     etq_comb_label = etiquetas_display.get(etq_comb, etq_comb.replace("_", " ").capitalize())
 
     # ── HTML ─────────────────────────────────────────────────────
-    return f"""<!DOCTYPE html>
-<html lang="es">
+    return f"""<!DOCTYPE html><html lang="es">
 <head>
 <meta charset="UTF-8"/>
 <style>
