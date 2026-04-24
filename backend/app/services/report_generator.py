@@ -68,7 +68,10 @@ class QuantitativeInput:
     starting_point:   Optional[str]
     semaforo:         Optional[str]
     recommendation:   Optional[str]
-
+    confidence_score:     Optional[float]   = None
+    needs_manual_review:  Optional[bool]    = None
+    tipo_sujeto:          Optional[str]     = None
+    nombre_sujeto:        Optional[str]     = None
 
 
 @dataclass
@@ -206,6 +209,10 @@ def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
         "semaforo":       c.semaforo,
         "recommendation": c.recommendation,
         "score_index":    score_index,
+        "confidence_score":      c.confidence_score,
+        "needs_manual_review":   c.needs_manual_review,
+        "tipo_sujeto":           c.tipo_sujeto,
+        "nombre_sujeto":         c.nombre_sujeto,
     }
 
 

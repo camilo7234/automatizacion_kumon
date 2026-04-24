@@ -32,19 +32,14 @@ from __future__ import annotations
 import io
 import logging
 import math
-import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-import matplotlib
-matplotlib.use("Agg")                    # sin display — servidor sin GUI
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.patches import FancyArrowPatch
-import numpy as np
-
+from reportlab.graphics import renderPDF
+from reportlab.graphics.charts.barcharts import HorizontalBarChart
+from reportlab.graphics.shapes import Drawing, Arc, String, Circle
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -64,8 +59,8 @@ from reportlab.platypus import (
 logger = logging.getLogger(__name__)
 
 # ── Rutas de assets ───────────────────────────────────────────────
-_ASSETS_DIR  = os.path.join(os.path.dirname(__file__), "..", "..", "assets")
-_LOGO_PATH   = os.path.join(_ASSETS_DIR, "logo_kumon.png")
+_ASSETS_DIR = Path(__file__).parent.parent.parent / "assets"
+_LOGO_PATH  = _ASSETS_DIR / "logo_kumon.png"
 
 # ── Nombre fijo del centro ────────────────────────────────────────
 _NOMBRE_CENTRO = "Kumon Ipiales"
@@ -89,11 +84,11 @@ _KUMON_AZUL_L = colors.HexColor("#E8F0FB")   # azul muy claro (fondos)
 _KUMON_AZUL_2 = colors.HexColor("#1A6BB5")   # azul botones / badges
 
 # ── Neutros ───────────────────────────────────────────────────────
-_GRIS_TXT     = colors.HexColor("#4B5563")   # texto secundario
-_GRIS_CLARO   = colors.HexColor("#F1F5F9")   # fondo alterno filas
-_BORDE        = colors.HexColor("#CBD5E1")   # bordes tabla
-_BLANCO       = colors.white
-_NEGRO        = colors.black
+_GRIS_TXT   = colors.HexColor("#4B5563")   # texto secundario
+_GRIS_CLARO = colors.HexColor("#F1F5F9")   # fondo alterno filas
+_BORDE      = colors.HexColor("#CBD5E1")   # bordes tabla
+_BLANCO     = colors.white
+_NEGRO      = colors.black
 
 # ── Semáforo (cuantitativo) ───────────────────────────────────────
 _SEM_COLOR: Dict[str, Any] = {
@@ -102,15 +97,9 @@ _SEM_COLOR: Dict[str, Any] = {
     "rojo":     colors.HexColor("#DC2626"),
 }
 _SEM_TEXTO: Dict[str, str] = {
-    "verde":    "✔  Puede avanzar al siguiente nivel",
-    "amarillo": "⚠  Debe consolidar antes de avanzar",
-    "rojo":     "✖  Requiere refuerzo en este nivel",
-}
-# Colores para matplotlib (hex str)
-_SEM_MPL: Dict[str, str] = {
-    "verde":    "#16A34A",
-    "amarillo": "#D97706",
-    "rojo":     "#DC2626",
+    "verde":    "[OK]  Puede avanzar al siguiente nivel",
+    "amarillo": "[!!]  Debe consolidar antes de avanzar",
+    "rojo":     "[XX]  Requiere refuerzo en este nivel",
 }
 
 # ── Etiquetas cualitativas ────────────────────────────────────────
@@ -130,21 +119,15 @@ _ETIQ_LABEL: Dict[str, str] = {
     "fortaleza":     "Fortaleza",
     "en_desarrollo": "En desarrollo",
     "refuerzo":      "Necesita refuerzo",
-    "atencion":      "Requiere atención especial",
-}
-# Colores MPL para la gráfica de barras (hex)
-_ETIQ_MPL_BG: Dict[str, str] = {
-    "fortaleza":     "#22C55E",
-    "en_desarrollo": "#3B82F6",
-    "refuerzo":      "#F59E0B",
-    "atencion":      "#EF4444",
+    "atencion":      "Requiere atencion especial",
 }
 
 # ── Fuente de cada prefill automático ────────────────────────────
+# Nota: emojis eliminados — no están garantizados en Helvetica/Linux.
 _FUENTE_ICONO: Dict[str, str] = {
-    "video":  "🎥",
-    "audio":  "🎤",
-    "camara": "📷",
+    "video":  "[Video]",
+    "audio":  "[Audio]",
+    "camara": "[Camara]",
 }
 
 
@@ -221,7 +204,6 @@ def _build_styles() -> Dict[str, ParagraphStyle]:
         ),
     }
 
-
 # ══════════════════════════════════════════════════════════════════
 # [2] HELPERS DE PARSEO
 # ══════════════════════════════════════════════════════════════════
@@ -248,7 +230,9 @@ def _parsear_starting_point(raw: Optional[str]) -> str:
         return "El orientador define entre: " + " o ".join(textos)
     match = re.match(r"^([A-Za-z0-9]+?)\s*(\d+)\s*([a-z]?)$", raw)
     if match:
-        nivel, hoja, variante = match.group(1).upper(), match.group(2), match.group(3)
+        nivel    = match.group(1).upper()
+        hoja     = match.group(2)
+        variante = match.group(3)
         base = f"Nivel {nivel} — Hoja {hoja}"
         if variante:
             base += f" (variante {variante})"
@@ -264,6 +248,10 @@ def _parsear_tiempo(estudio: Optional[float], objetivo: Optional[float]) -> str:
     if estudio is None:
         return "No disponible"
 
+    # Guard: tiempo 0 es dato no capturado, no tiempo real de trabajo
+    if estudio == 0.0:
+        return "No registrado (tiempo en 0)"
+
     def _fmt(minutos: float) -> str:
         mins = int(minutos)
         segs = round((minutos - mins) * 60)
@@ -272,7 +260,7 @@ def _parsear_tiempo(estudio: Optional[float], objetivo: Optional[float]) -> str:
     txt = _fmt(estudio)
     if objetivo is not None:
         txt += f"  (objetivo: {_fmt(objetivo)})"
-        txt += "  — dentro del tiempo" if estudio <= objetivo else "  — tardó más del objetivo"
+        txt += "  — dentro del tiempo" if estudio <= objetivo else "  — tardó mas del objetivo"
     return txt
 
 
@@ -286,13 +274,15 @@ def _parsear_display_name(cuant: Dict[str, Any]) -> str:
 
 
 def _label_fuente(prefill_item: Dict[str, Any]) -> str:
-    """Retorna texto con fuente e ícono para la tabla de prefills."""
+    """Retorna texto con fuente e icono para la tabla de prefills."""
     fuente = prefill_item.get("fuente", "")
     conf   = prefill_item.get("confianza")
-    icono  = _FUENTE_ICONO.get(fuente, "⚙")
-    conf_txt = f" ({conf*100:.0f}%)" if conf is not None else ""
+    icono  = _FUENTE_ICONO.get(fuente, "[Auto]")   # fallback ASCII, no emoji/Unicode
+    try:
+        conf_txt = f" ({float(conf)*100:.0f}%)" if conf is not None else ""
+    except (TypeError, ValueError):
+        conf_txt = ""
     return f"{icono} {fuente.capitalize()}{conf_txt}"
-
 
 # ══════════════════════════════════════════════════════════════════
 # [3] COMPONENTES VISUALES REUTILIZABLES
@@ -304,7 +294,7 @@ def _tabla_base_style(
     alternate: bool = True,
 ) -> TableStyle:
     """
-    Retorna un TableStyle azul estándar Kumon reutilizable.
+    Retorna un TableStyle azul estandar Kumon reutilizable.
     header_color: color de la fila 0; por defecto _KUMON_AZUL_M.
     """
     hc = header_color or _KUMON_AZUL_M
@@ -330,17 +320,17 @@ def _bloque_color(
     texto: str,
     bg: Any,
     fg: Any = None,
-    ancho: float = None,
+    ancho: Optional[float] = None,   # corregido: Optional[float] en vez de float = None
     font_size: int = 10,
     bold: bool = True,
 ) -> Table:
     """
-    Crea un bloque de una celda con fondo de color (semáforo, etiqueta…).
-    Sirve tanto para semáforo cuantitativo como para badge cualitativo.
+    Crea un bloque de una celda con fondo de color (semaforo, etiqueta...).
+    Sirve tanto para semaforo cuantitativo como para badge cualitativo.
     """
-    fg     = fg or _BLANCO
-    ancho  = ancho or _PAGE_W
-    fn     = "Helvetica-Bold" if bold else "Helvetica"
+    fg    = fg or _BLANCO
+    ancho = ancho or _PAGE_W
+    fn    = "Helvetica-Bold" if bold else "Helvetica"
     bloque = Table([[texto]], colWidths=[ancho])
     bloque.setStyle(TableStyle([
         ("BACKGROUND",    (0, 0), (-1, -1), bg),
@@ -350,7 +340,7 @@ def _bloque_color(
         ("ALIGN",         (0, 0), (-1, -1), "CENTER"),
         ("TOPPADDING",    (0, 0), (-1, -1), 7),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
-        ("ROUNDEDCORNERS", [4]),
+        # "ROUNDEDCORNERS" eliminado — no existe en ReportLab TableStyle
     ]))
     return bloque
 
@@ -364,41 +354,44 @@ def _barra_progreso_rl(
 ) -> Table:
     """
     Barra de progreso horizontal usando celdas de ReportLab.
-    pct: 0.0–100.0
-    Devuelve una Table de una fila con dos celdas (rellena + vacía).
+    pct: 0.0-100.0
+    Devuelve una Table de una fila con dos celdas (rellena + vacia).
     """
     color_barra = color_barra or _KUMON_AZUL_2
     color_fondo = color_fondo or _KUMON_AZUL_L
-    pct_clamp   = max(0.0, min(100.0, pct))
-    filled_w    = width * pct_clamp / 100
-    empty_w     = width - filled_w
+    pct_clamp   = max(0.0, min(100.0, float(pct)))
+    filled_w    = width * pct_clamp / 100.0
 
-    # Si el ancho relleno es 0, poner al menos 1pt para no romper la tabla
-    if filled_w <= 0:
-        filled_w = 1
-        empty_w  = width - filled_w
+    # Garantizar ancho mínimo para no romper Table con colWidth=0
+    filled_w = max(filled_w, 1.0)
+    empty_w  = max(width - filled_w, 0.0)
 
-    cols = [filled_w]
-    data = [["", ""]]
     if empty_w > 0:
-        cols.append(empty_w)
+        cols = [filled_w, empty_w]
+        data = [["", ""]]
+        cmds = [
+            ("BACKGROUND", (0, 0), (0, 0), color_barra),
+            ("BACKGROUND", (1, 0), (1, 0), color_fondo),
+        ]
     else:
-        data = [[""]]; cols = [width]
+        # pct == 100%: una sola celda rellena
+        cols = [width]
+        data = [[""]]
+        cmds = [
+            ("BACKGROUND", (0, 0), (0, 0), color_barra),
+        ]
 
-    tbl = Table(data, colWidths=cols, rowHeights=[height])
-    cmds = [
-        ("BACKGROUND",    (0, 0), (0, 0),  color_barra),
+    cmds += [
         ("TOPPADDING",    (0, 0), (-1, -1), 0),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
         ("LEFTPADDING",   (0, 0), (-1, -1), 0),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
         ("BOX",           (0, 0), (-1, -1), 0.3, _BORDE),
     ]
-    if empty_w > 0:
-        cmds.append(("BACKGROUND", (1, 0), (1, 0), color_fondo))
+
+    tbl = Table(data, colWidths=cols, rowHeights=[height])
     tbl.setStyle(TableStyle(cmds))
     return tbl
-
 
 # ══════════════════════════════════════════════════════════════════
 # [4] GRÁFICA DE BARRAS HORIZONTALES — ACTITUD POR SECCIÓN
