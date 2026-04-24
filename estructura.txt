@@ -17,6 +17,7 @@ automatizacion_kumon/
 │   │   │   └── cuestionario.py             ← Schemas del cuestionario (Pydantic)
 │   │   └── services/
 │   │       ├── __init__.py                 ← Exportaciones públicas del paquete
+│   │       ├── pdf_generator.py
 │   │       ├── video_processor.py          ← Análisis CV2 frame a frame
 │   │       ├── ocr_service.py              ← EasyOCR sobre frame resumen
 │   │       ├── audio_analyzer.py           ← VAD + speech rate
