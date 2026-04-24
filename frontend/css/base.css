@@ -1,0 +1,135 @@
+/* ============================================================
+   KUMON · BASE
+   Archivo: frontend/css/base.css
+   Depende de: tokens.css
+   Rol: Reset, body, tipografía base, accesibilidad,
+        estados de foco, reduced-motion. Sin clases propias —
+        solo selectores de elemento y pseudo-clases globales.
+   ============================================================ */
+
+/* ── RESET ── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── HTML / BODY ── */
+html {
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--space-8);
+  hanging-punctuation: first last;
+}
+
+body {
+  min-height: 100dvh;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--grad-bg);
+}
+
+/* ── ELEMENTOS VISUALES ── */
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* ── TIPOGRAFÍA ── */
+h1, h2, h3, h4, h5, h6 {
+  text-wrap: balance;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+p, li, figcaption {
+  text-wrap: pretty;
+  max-width: 72ch;
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color var(--transition);
+}
+
+a:hover {
+  color: var(--primary-2);
+}
+
+/* ── FORMULARIOS ── */
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+/* ── TABLAS ── */
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+/* ── ACCESIBILIDAD: FOCO ── */
+:focus-visible {
+  outline: 2px solid var(--primary-2);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+/* ── ACCESIBILIDAD: SKIP LINK ── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── SELECCIÓN DE TEXTO ── */
+::selection {
+  background: rgba(10, 116, 218, 0.18);
+  color: var(--text);
+}
+
+/* ── INTERACTIVOS: TRANSICIÓN BASE ── */
+a, button, [role="button"],
+input, textarea, select {
+  transition:
+    color         var(--transition),
+    background    var(--transition),
+    border-color  var(--transition),
+    box-shadow    var(--transition),
+    opacity       var(--transition);
+}
+
+/* ── REDUCED MOTION ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1     !important;
+    transition-duration:      0.01ms !important;
+    scroll-behavior:          auto   !important;
+  }
+}
+
+/* ── UTILIDAD: OCULTAR ── */
+.hidden {
+  display: none !important;
+}

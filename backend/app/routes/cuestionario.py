@@ -397,6 +397,30 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
     # Obtener el job para usar la fecha oficial de carga del video
     job = result.job
 
+    # ── Resolver nombre del sujeto ───────────────────────────────
+    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
+    nombre_sujeto = ""
+    for obj in [
+        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
+        else getattr(result, "estudiante", None),
+        getattr(result, "prospecto", None),
+        getattr(result, "estudiante", None),
+    ]:
+        if obj is None:
+            continue
+        for attr in ("nombre_completo", "full_name", "display_name", "name"):
+            val = getattr(obj, attr, None)
+            if val:
+                nombre_sujeto = str(val)
+                break
+        if not nombre_sujeto:
+            p = getattr(obj, "primer_nombre", None)
+            a = getattr(obj, "primer_apellido", None)
+            if p or a:
+                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
+        if nombre_sujeto:
+            break
+
     qnt = QuantitativeInput(
         subject=template.subject,
         test_code=template.code,
@@ -412,6 +436,10 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         starting_point=result.starting_point,
         semaforo=result.semaforo,
         recommendation=result.recommendation,
+        confidence_score=result.confidence_score,
+        needs_manual_review=result.needs_manual_review,
+        tipo_sujeto=result.tipo_sujeto,
+        nombre_sujeto=nombre_sujeto,
     )
 
     cual_input = QualitativeInput(
@@ -456,7 +484,6 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         gaze=datos.get("gaze"),
         message="Boletín generado correctamente.",
     )
-
 
 # ──────────────────────────────────────────────────────────────
 # Helpers para generación de PDF
@@ -1223,6 +1250,30 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
 
     job = result.job
 
+    # ── Obtener nombre del sujeto ────────────────────────────────
+    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
+    nombre_sujeto = ""
+    for obj in [
+        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
+        else getattr(result, "estudiante", None),
+        getattr(result, "prospecto", None),
+        getattr(result, "estudiante", None),
+    ]:
+        if obj is None:
+            continue
+        for attr in ("nombre_completo", "full_name", "display_name", "name"):
+            val = getattr(obj, attr, None)
+            if val:
+                nombre_sujeto = str(val)
+                break
+        if not nombre_sujeto:
+            p = getattr(obj, "primer_nombre", None)
+            a = getattr(obj, "primer_apellido", None)
+            if p or a:
+                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
+        if nombre_sujeto:
+            break
+
     qnt = QuantitativeInput(
         subject=template.subject,
         test_code=template.code,
@@ -1238,6 +1289,10 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         starting_point=result.starting_point,
         semaforo=result.semaforo,
         recommendation=result.recommendation,
+        confidence_score=result.confidence_score,
+        needs_manual_review=result.needs_manual_review,
+        tipo_sujeto=result.tipo_sujeto,
+        nombre_sujeto=nombre_sujeto,
     )
 
     cual_input = QualitativeInput(
@@ -1270,30 +1325,6 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         db.refresh(bulletin)
 
     datos = bulletin.datos_boletin or datos
-
-    # ── Obtener nombre del sujeto ────────────────────────────────
-    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
-    nombre_sujeto = ""
-    for obj in [
-        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
-        else getattr(result, "estudiante", None),
-        getattr(result, "prospecto", None),
-        getattr(result, "estudiante", None),
-    ]:
-        if obj is None:
-            continue
-        for attr in ("nombre_completo", "full_name", "display_name", "name"):
-            val = getattr(obj, attr, None)
-            if val:
-                nombre_sujeto = str(val)
-                break
-        if not nombre_sujeto:
-            p = getattr(obj, "primer_nombre", None)
-            a = getattr(obj, "primer_apellido", None)
-            if p or a:
-                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
-        if nombre_sujeto:
-            break
 
     # ── Nombre del archivo sugerido ──────────────────────────────
     nombre_safe = (nombre_sujeto or "sin-nombre").replace("/", "-").replace("\\", "-").replace(" ", "_")

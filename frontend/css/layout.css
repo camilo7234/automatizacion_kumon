@@ -1,0 +1,200 @@
+/* ============================================================
+   KUMON · LAYOUT
+   Archivo: frontend/css/layout.css
+   Depende de: tokens.css, base.css
+   Rol: Estructura visual completa de la app — hero superior,
+        contenedor principal, columna izquierda (upload +
+        pipeline + resultado) y columna derecha (cuestionario
+        + boletín). Responsive 375px → 1480px.
+   ============================================================ */
+
+/* ══════════════════════════════════════════════
+   HERO / HEADER
+   ══════════════════════════════════════════════ */
+.hero {
+  background:  var(--grad-hero);
+  color:       #fff;
+  padding:     var(--space-6) var(--space-8);
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-4);
+  box-shadow:  0 4px 20px rgba(0, 58, 140, 0.22);
+  position:    sticky;
+  top:         0;
+  z-index:     100;
+}
+
+.hero-logo {
+  width:        42px;
+  height:       42px;
+  background:   rgba(255,255,255,0.18);
+  border:       2px solid rgba(255,255,255,0.35);
+  border-radius: var(--radius-sm);
+  display:      flex;
+  align-items:  center;
+  justify-content: center;
+  font-size:    var(--text-xl);
+  font-weight:  900;
+  color:        #fff;
+  flex-shrink:  0;
+}
+
+.hero-titles {
+  display:        flex;
+  flex-direction: column;
+  gap:            2px;
+}
+
+.hero-title {
+  font-size:   var(--text-xl);
+  font-weight: 800;
+  color:       #fff;
+  line-height: 1.1;
+}
+
+.hero-subtitle {
+  font-size: var(--text-xs);
+  color:     rgba(255,255,255,0.72);
+  font-weight: 500;
+}
+
+.hero-right {
+  margin-left: auto;
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-3);
+}
+
+/* Indicador de conexión al backend */
+.backend-status {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-2);
+  font-size:   var(--text-xs);
+  color:       rgba(255,255,255,0.75);
+  font-weight: 500;
+}
+
+.backend-status-dot {
+  width:         8px;
+  height:        8px;
+  border-radius: var(--radius-full);
+  background:    #fbbf24;
+  flex-shrink:   0;
+  transition:    background var(--transition);
+}
+
+.backend-status-dot.ok      { background: #34d399; }
+.backend-status-dot.error   { background: #f87171; }
+.backend-status-dot.pending { background: #fbbf24; }
+
+
+/* ══════════════════════════════════════════════
+   CONTENEDOR PRINCIPAL DE LA APP
+   ══════════════════════════════════════════════ */
+.app {
+  max-width: var(--content-max);
+  margin:    0 auto;
+  padding:   var(--space-8) var(--space-6);
+}
+
+
+/* ══════════════════════════════════════════════
+   LAYOUT DE DOS COLUMNAS
+   ══════════════════════════════════════════════ */
+.layout {
+  display:               grid;
+  grid-template-columns: minmax(var(--col-left-min), 1fr) minmax(420px, 0.7fr);
+  gap:                   var(--space-8);
+  align-items:           start;
+}
+
+.left-col {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-6);
+  position:       sticky;
+  top:            calc(74px + var(--space-6));
+  max-height:     calc(100dvh - 74px - var(--space-12));
+  overflow-y:     auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.right-col {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-6);
+}
+
+
+/* ══════════════════════════════════════════════
+   SECCIÓN GENÉRICA
+   ══════════════════════════════════════════════ */
+.section {
+  background:    var(--surface);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow:    var(--shadow-sm);
+  overflow:      hidden;
+}
+
+.section-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  padding:         var(--space-5) var(--space-6);
+  border-bottom:   1px solid var(--line);
+  background:      var(--grad-surface-2);
+  gap:             var(--space-3);
+}
+
+.section-header h2 {
+  font-size:   var(--text-lg);
+  font-weight: 700;
+  color:       var(--text);
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-2);
+}
+
+.section-body {
+  padding:        var(--space-5) var(--space-6);
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-5);
+}
+
+
+/* ══════════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 1180px)
+   ══════════════════════════════════════════════ */
+@media (max-width: 1180px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .left-col {
+    position:   static;
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
+
+/* ══════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 640px)
+   ══════════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .hero        { padding: var(--space-4); }
+  .hero-subtitle { display: none; }
+  .app         { padding: var(--space-4) var(--space-3); }
+  .section-header { padding: var(--space-4); flex-wrap: wrap; }
+  .section-body   { padding: var(--space-4); }
+  .btn-row        { flex-direction: column; align-items: stretch; }
+  .btn-row .btn   { width: 100%; justify-content: center; }
+}
+
+@media (max-width: 400px) {
+  .hero-logo  { width: 34px; height: 34px; }
+  .hero-title { font-size: var(--text-lg); }
+}

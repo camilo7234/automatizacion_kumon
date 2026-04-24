@@ -1,0 +1,395 @@
+/* ============================================================
+   KUMON · MÓDULO CUESTIONARIO INTELIGENTE
+   Archivo: frontend/css/modules/cuestionario.css
+   Depende de: tokens.css, components.css
+   Rol: Estilos del formulario de validación cualitativa.
+        Conectado con:
+          GET  /api/v1/cuestionario/{resultId}
+          POST /api/v1/cuestionario/{resultId}
+        Estructura que llega del backend:
+          { sections: [ { id, title, context, questions: [
+              { key, label, type, options, prefill,
+                prefill_source, needs_manual_review }
+          ]}]}
+   ============================================================ */
+
+/* ══════════════════════════════════════════════
+   HEADER DEL CUESTIONARIO
+   Muestra: nombre del estudiante, estado, orientador
+   ══════════════════════════════════════════════ */
+.cuestionario-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             var(--space-4);
+  flex-wrap:       wrap;
+}
+
+.cuestionario-student {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-1);
+}
+
+.cuestionario-student-name {
+  font-size:   var(--text-lg);
+  font-weight: 800;
+  color:       var(--text);
+}
+
+.cuestionario-student-sub {
+  font-size:  var(--text-xs);
+  color:      var(--muted);
+  font-weight: 500;
+}
+
+
+/* ══════════════════════════════════════════════
+   SECCIÓN DEL CUESTIONARIO
+   Cada sección agrupa preguntas por tema
+   ══════════════════════════════════════════════ */
+.cuestionario-section {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-4);
+  padding:        var(--space-5);
+  background:     var(--surface-2);
+  border:         1px solid var(--line);
+  border-radius:  var(--radius-md);
+}
+
+.cuestionario-section-title {
+  font-size:   var(--text-base);
+  font-weight: 700;
+  color:       var(--text);
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-2);
+}
+
+.cuestionario-section-title .section-icon {
+  font-size: 1.1em;
+}
+
+/* Banner de contexto de la sección
+   Muestra información relevante del resultado
+   para que el orientador tenga contexto al responder */
+.section-context-banner {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           var(--space-2);
+  padding:       var(--space-3) var(--space-4);
+  background:    var(--info-bg);
+  border:        1px solid var(--info-line);
+  border-radius: var(--radius-sm);
+  font-size:     var(--text-xs);
+  color:         var(--info-text);
+  line-height:   1.5;
+}
+
+.section-context-banner-icon {
+  flex-shrink: 0;
+  font-size:   1rem;
+  margin-top:  1px;
+}
+
+/* Banner de alerta cuando needs_manual_review = true
+   en alguna pregunta de la sección */
+.section-review-banner {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           var(--space-2);
+  padding:       var(--space-3) var(--space-4);
+  background:    var(--warning-bg);
+  border:        1px solid var(--warning-line);
+  border-radius: var(--radius-sm);
+  font-size:     var(--text-xs);
+  color:         var(--warning-text);
+  font-weight:   500;
+  line-height:   1.5;
+}
+
+
+/* ══════════════════════════════════════════════
+   BLOQUE DE PREGUNTA
+   Cada question del backend genera uno de estos
+   ══════════════════════════════════════════════ */
+.question-block {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-3);
+  padding:        var(--space-4);
+  background:     var(--surface);
+  border:         1px solid var(--line);
+  border-radius:  var(--radius-sm);
+  transition:     border-color var(--transition), box-shadow var(--transition);
+}
+
+/* Resaltar si tiene prefill del sistema */
+.question-block.has-prefill {
+  border-color: rgba(10, 116, 218, 0.25);
+  background:   #fafcff;
+}
+
+/* Resaltar si necesita revisión manual */
+.question-block.needs-review {
+  border-color: var(--warning-line);
+  background:   var(--warning-bg);
+}
+
+.question-block:focus-within {
+  border-color: var(--primary-2);
+  box-shadow:   0 0 0 3px rgba(10, 116, 218, 0.10);
+}
+
+
+/* ── LABEL DE LA PREGUNTA ── */
+.question-label {
+  font-size:   var(--text-sm);
+  font-weight: 600;
+  color:       var(--text);
+  line-height: 1.4;
+  display:     flex;
+  align-items: flex-start;
+  gap:         var(--space-2);
+}
+
+.question-label .q-num {
+  font-size:     var(--text-xs);
+  font-weight:   700;
+  color:         var(--surface);
+  background:    var(--primary);
+  border-radius: var(--radius-full);
+  min-width:     20px;
+  height:        20px;
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  flex-shrink:   0;
+  margin-top:    1px;
+}
+
+/* Badge "revisión manual requerida" */
+.q-review-badge {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           var(--space-1);
+  font-size:     var(--text-xs);
+  color:         var(--warning-text);
+  background:    var(--warning-bg);
+  border:        1px solid var(--warning-line);
+  border-radius: var(--radius-full);
+  padding:       2px var(--space-2);
+  font-weight:   600;
+  flex-shrink:   0;
+}
+
+
+/* ══════════════════════════════════════════════
+   TIPO: OPCIONES MÚLTIPLES (radio / select)
+   type: "radio" | "select" en el backend
+   ══════════════════════════════════════════════ */
+.option-list {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       var(--space-2);
+}
+
+.option-item {
+  position: relative;
+}
+
+.option-item input[type="radio"],
+.option-item input[type="checkbox"] {
+  position: absolute;
+  opacity:  0;
+  width:    0;
+  height:   0;
+}
+
+.option-item label {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--space-2);
+  padding:       0.4rem var(--space-4);
+  border:        1.5px solid var(--line);
+  border-radius: var(--radius-full);
+  font-size:     var(--text-sm);
+  font-weight:   500;
+  color:         var(--muted);
+  background:    var(--surface);
+  cursor:        pointer;
+  transition:
+    border-color var(--transition),
+    background   var(--transition),
+    color        var(--transition),
+    box-shadow   var(--transition);
+  min-height:    40px;
+  user-select:   none;
+}
+
+.option-item label:hover {
+  border-color: var(--primary-2);
+  background:   var(--primary-3);
+  color:        var(--primary);
+}
+
+/* Seleccionado */
+.option-item input:checked + label {
+  border-color: var(--primary);
+  background:   var(--primary-3);
+  color:        var(--primary);
+  font-weight:  700;
+  box-shadow:   0 0 0 3px rgba(10,116,218,0.12);
+}
+
+
+/* ══════════════════════════════════════════════
+   TIPO: TEXTAREA (observación libre)
+   key: "observacion_libre" en el backend
+   ══════════════════════════════════════════════ */
+.question-textarea {
+  width:         100%;
+  padding:       var(--space-3) var(--space-4);
+  border:        1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size:     var(--text-sm);
+  color:         var(--text);
+  background:    var(--surface);
+  min-height:    100px;
+  resize:        vertical;
+  line-height:   1.6;
+  transition:    border-color var(--transition), box-shadow var(--transition);
+}
+
+.question-textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.question-textarea:focus {
+  border-color: var(--primary-2);
+  box-shadow:   0 0 0 3px rgba(10,116,218,0.12);
+  outline:      none;
+}
+
+
+/* ══════════════════════════════════════════════
+   TIPO: INPUT DE CORRECCIÓN NUMÉRICA
+   Aparece cuando needs_manual_review = true
+   Permite al orientador corregir el valor del OCR
+   ══════════════════════════════════════════════ */
+.correction-row {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-3);
+  flex-wrap:   wrap;
+}
+
+.correction-row-label {
+  font-size:  var(--text-xs);
+  color:      var(--muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.correction-input {
+  padding:       0.45rem var(--space-3);
+  border:        1.5px solid var(--warning-line);
+  border-radius: var(--radius-sm);
+  font-size:     var(--text-sm);
+  font-weight:   700;
+  color:         var(--text);
+  background:    var(--surface);
+  width:         90px;
+  text-align:    center;
+  transition:    border-color var(--transition), box-shadow var(--transition);
+}
+
+.correction-input:focus {
+  border-color: var(--primary-2);
+  box-shadow:   0 0 0 3px rgba(10,116,218,0.12);
+  outline:      none;
+}
+
+/* Valor original del OCR para referencia */
+.ocr-original {
+  font-size:  var(--text-xs);
+  color:      var(--muted);
+  background: var(--surface-2);
+  border:     1px solid var(--line);
+  border-radius: var(--radius-full);
+  padding:    2px var(--space-3);
+}
+
+.ocr-original s {
+  color:          var(--text-faint);
+  text-decoration: line-through;
+}
+
+
+/* ══════════════════════════════════════════════
+   PREFILL DEL SISTEMA
+   Sugerencia automática basada en el resultado
+   del video. Viene en question.prefill y
+   question.prefill_source del backend.
+   ══════════════════════════════════════════════ */
+.prefill-hint {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--space-2);
+  padding:       var(--space-2) var(--space-3);
+  background:    var(--warning-bg);
+  border:        1px solid var(--warning-line);
+  border-left:   3px solid var(--warning);
+  border-radius: var(--radius-xs);
+  font-size:     var(--text-xs);
+  color:         var(--warning-text);
+  line-height:   1.4;
+}
+
+.prefill-hint-icon {
+  flex-shrink: 0;
+  font-size:   0.9rem;
+}
+
+.prefill-hint strong {
+  font-weight: 700;
+}
+
+
+/* ══════════════════════════════════════════════
+   FOOTER DEL CUESTIONARIO
+   Campo orientador + botón de submit
+   ══════════════════════════════════════════════ */
+.cuestionario-footer {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-4);
+  padding-top:    var(--space-4);
+  border-top:     1px solid var(--line);
+}
+
+.cuestionario-footer-row {
+  display:     flex;
+  align-items: flex-end;
+  gap:         var(--space-4);
+  flex-wrap:   wrap;
+}
+
+.cuestionario-footer-row .field {
+  flex:      1;
+  min-width: 180px;
+}
+
+/* Contador de preguntas respondidas */
+.cuestionario-progress-label {
+  font-size:   var(--text-xs);
+  color:       var(--muted);
+  font-weight: 500;
+  text-align:  right;
+}
+
+.cuestionario-progress-label span {
+  font-weight: 700;
+  color:       var(--primary);
+}
