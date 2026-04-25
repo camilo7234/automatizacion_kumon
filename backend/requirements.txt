@@ -1,3 +1,7 @@
+# ══════════════════════════════════════════════════════════════════
+# requirements.txt — Dependencias fijadas con versión exacta
+# ══════════════════════════════════════════════════════════════════
+
 # ── Web framework ──────────────────────────────────────────────────
 fastapi==0.111.0
 uvicorn[standard]==0.29.0
@@ -13,13 +17,17 @@ psycopg2-binary==2.9.9
 pydantic[email]==2.7.1
 pydantic-settings==2.2.1
 
-# ── OCR (torch se instala antes por separado) ──────────────────────
+# ── OCR (torch se instala antes por separado — ver instrucciones) ──
 easyocr==1.7.1
 
 # ── Video / imagen ─────────────────────────────────────────────────
 opencv-python==4.9.0.80
-pillow>=10.0.0
-numpy>=1.24.0
+# pillow>=10.3.0 — parchea CVE-2024-28219 (buffer overflow en ImageFont)
+pillow>=10.3.0
+# ★ FIX: numpy estaba duplicado con versiones distintas (>=1.24.0 y >=1.26.0)
+#   Se unifica en la versión mínima más alta para satisfacer AMBOS usos
+#   (video/imagen Y PDF/matplotlib).
+numpy>=1.26.0
 
 # ── Audio ──────────────────────────────────────────────────────────
 librosa>=0.10.0
@@ -29,7 +37,6 @@ webrtcvad-wheels==2.0.14
 # ── PDF ────────────────────────────────────────────────────────────
 reportlab==4.2.0
 matplotlib>=3.8.0
-numpy>=1.26.0
 
 # ── Utilidades ─────────────────────────────────────────────────────
 python-dotenv==1.0.1
