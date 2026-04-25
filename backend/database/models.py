@@ -368,6 +368,7 @@ class Prospecto(Base):
 # ──────────────────────────────────────────────────────────────────
 
 
+
 class ProcessingJob(Base):
     """
     [PROCESSING 3/7] Cola de procesamiento de videos.
@@ -392,6 +393,21 @@ class ProcessingJob(Base):
         CheckConstraint(
             "completed_at IS NULL OR completed_at >= started_at",
             name="chk_job_completado",
+        ),
+        # H8 — status solo acepta valores del ciclo de vida definido.
+        # Las properties is_done/is_error/needs_review dependen de estos
+        # valores exactos. Sin este constraint un bug silencioso puede
+        # guardar un status inválido y dejar el job en limbo para siempre.
+        CheckConstraint(
+            "status IN ('queued','processing','done','error','manual_review')",
+            name="chk_job_status",
+        ),
+        # H7 — progress_percent debe estar entre 0 y 100.
+        # El frontend consume este valor directamente para la barra de progreso.
+        # Un valor fuera de rango (ej: 150) rompe la UI sin lanzar ningún error.
+        CheckConstraint(
+            "progress_percent BETWEEN 0 AND 100",
+            name="chk_job_progress",
         ),
         {"schema": "processing"},
     )
@@ -559,7 +575,32 @@ class TestResult(Base):
     """
 
     __tablename__ = "test_results"
-    __table_args__ = {"schema": "processing"}
+    __table_args__ = (
+        # H9 — semaforo solo acepta los tres valores del diagnóstico Kumon.
+        # result_calculator.py y el frontend bifurcan por estos valores exactos.
+        # NULL permitido: el resultado puede existir antes de que el calculador
+        # asigne el semáforo (ej: job en manual_review pendiente de revisión).
+        CheckConstraint(
+            "semaforo IS NULL OR semaforo IN ('verde','amarillo','rojo')",
+            name="chk_result_semaforo",
+        ),
+        # H10 — tipo_sujeto distingue el flujo prospecto vs estudiante matriculado.
+        # La lógica del boletín y las FKs dependen de que sea exactamente uno de
+        # estos dos valores. NOT NULL en la columna, por eso no se permite NULL aquí.
+        CheckConstraint(
+            "tipo_sujeto IN ('prospecto','estudiante')",
+            name="chk_result_tipo_sujeto",
+        ),
+        # H11 — percentage viene del OCR sobre el frame de Class Navi.
+        # Un error de OCR puede leer "100%" como "1009" o similar.
+        # Este constraint rechaza valores absurdos antes de que alimenten
+        # el cálculo del semáforo. NULL permitido: OCR puede fallar parcialmente.
+        CheckConstraint(
+            "percentage IS NULL OR percentage BETWEEN 0 AND 100",
+            name="chk_result_percentage",
+        ),
+        {"schema": "processing"},
+    )
 
     id_result     = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_job        = Column(
@@ -692,7 +733,6 @@ class TestResult(Base):
             f"semaforo='{self.semaforo}' "
             f"tipo='{self.tipo_sujeto}'>"
         )
-
 
 # ──────────────────────────────────────────────────────────────────
 # BLOQUE 2.5 — QualitativeResult
@@ -866,7 +906,19 @@ class ObservacionCualitativa(Base):
     """
 
     __tablename__ = "observaciones_cualitativas"
-    __table_args__ = {"schema": "processing"}
+    __table_args__ = (
+        # H14 — etiqueta_cualitativa es la etiqueta pedagógica del bloque cualitativo.
+        # El boletín renderiza un ícono y color diferente por cada valor.
+        # Un string inválido aquí produce un boletín con sección cualitativa
+        # en blanco o con ícono roto sin ningún error en logs.
+        # NULL permitido: la observación se crea antes de completar el formulario.
+        CheckConstraint(
+            "etiqueta_cualitativa IS NULL OR "
+            "etiqueta_cualitativa IN ('fortaleza','en_desarrollo','refuerzo','atencion')",
+            name="chk_obs_etiqueta_cualitativa",
+        ),
+        {"schema": "processing"},
+    )
 
     id_observacion = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_result      = Column(
@@ -951,7 +1003,6 @@ class ObservacionCualitativa(Base):
             f"completo={self.esta_completo} "
             f"subject='{self.subject}' code='{self.test_code}'>"
         )
-
 # ──────────────────────────────────────────────────────────────────
 # BLOQUE 2.7 — Bulletin
 # Boletín PDF final. Consolida los 3 bloques del informe:
@@ -990,7 +1041,25 @@ class Bulletin(Base):
     """
 
     __tablename__ = "bulletins"
-    __table_args__ = {"schema": "processing"}
+    __table_args__ = (
+        # H16 — status solo acepta los 5 valores del ciclo de vida del boletín.
+        # Las properties is_ready e is_delivered comparan contra estos strings
+        # exactos. Un valor inválido deja el boletín en un estado fantasma
+        # que nunca activa la descarga del PDF ni el flujo de entrega.
+        CheckConstraint(
+            "status IN ('pending','generating','ready','delivered','error')",
+            name="chk_bulletin_status",
+        ),
+        # H17 — etiqueta_combinada es la etiqueta pedagógica final del diagnóstico.
+        # El PDF la renderiza con ícono y color específico por valor.
+        # NULL permitido: el boletín existe en 'pending' antes de calcularla.
+        CheckConstraint(
+            "etiqueta_combinada IS NULL OR "
+            "etiqueta_combinada IN ('fortaleza','en_desarrollo','refuerzo','atencion')",
+            name="chk_bulletin_etiqueta",
+        ),
+        {"schema": "processing"},
+    )
 
     id_bulletin  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     id_result    = Column(
@@ -1073,7 +1142,6 @@ class Bulletin(Base):
             f"status='{self.status}' "
             f"etiqueta='{self.etiqueta_combinada}'>"
         )
-
 
 # ══════════════════════════════════════════════════════════════════
 # BLOQUE 3 — Schema AUDIT
