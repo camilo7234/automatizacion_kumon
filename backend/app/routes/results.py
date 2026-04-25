@@ -1,5 +1,4 @@
 from __future__ import annotations
-print("🚨 VERSION NUEVA DE RESULTS.PY CARGADA")
 
 """
 app/routes/results.py

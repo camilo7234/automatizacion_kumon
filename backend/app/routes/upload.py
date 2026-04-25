@@ -8,24 +8,29 @@ Sube el video, crea el ProcessingJob y dispara el pipeline.
 FLUJO:
   1. Valida extensión del archivo (ANTES de leer contenido).
   2. Normaliza subject/test_code y verifica que exista TestTemplate activo.
-  3. Crea Prospecto y ProcessingJob=queued.
-  4. Guarda el video en uploads/videos/ mediante streaming por chunks.
-     ★ FIX FASE 1: el video ya NO se carga completo en RAM.
-       Se escribe chunk a chunk y se va contando el tamaño en vuelo.
-       Si se supera MAX_VIDEO_SIZE_MB se aborta antes de terminar.
-  5. Lanza ejecutar_pipeline(job_id) como BackgroundTask.
-  6. Retorna JobStatusResponse inicial.
+  3. Crea Prospecto + guarda video en disco (streaming) + crea ProcessingJob
+     — todo dentro de un único bloque transaccional: si algo falla en
+     cualquier punto, se hace db.rollback() y se elimina el archivo físico.
+  4. Lanza ejecutar_pipeline(job_id) como BackgroundTask SOLO después
+     del db.commit() exitoso.
+  5. Retorna JobStatusResponse inicial.
 
-CAMBIOS RESPECTO A LA VERSIÓN ANTERIOR:
-  - BLOQUE 2 (extensión) se ejecuta ANTES de tocar el body.
-  - BLOQUE 3 desaparece: content = await file.read() → eliminado.
-  - El guardado en disco (BLOQUE 6) es ahora streaming con chunks de 1 MiB.
-  - El hash MD5 (BLOQUE 7) se calcula incrementalmente durante el streaming.
-  - El rollback de archivo parcial ante error se hace en finally.
+CAMBIOS FASE 1:
+  - Streaming de video por chunks de 1 MiB (sin carga completa en RAM).
+  - Hash MD5 calculado incrementalmente durante el streaming.
+
+CAMBIOS FASE 2 — Paso 2 (archivo huérfano):
+  - BLOQUE 4 (Prospecto), BLOQUE 5 (disco) y BLOQUE 6 (ProcessingJob)
+    ahora viven dentro de un único try/except que hace rollback de BD
+    Y elimina el archivo físico si cualquier paso falla.
+  - await file.close() en finally: el UploadFile siempre se cierra.
+  - background_tasks.add_task() movido FUERA del try, después del commit,
+    porque job.id_job solo es confiable tras commit exitoso.
 ══════════════════════════════════════════════════════════════════
 """
 
 import hashlib
+import logging
 import os
 from pathlib import Path
 from typing import Optional
@@ -54,6 +59,7 @@ from app.schemas.job import JobStatusResponse
 from app.schemas.upload import VideoUploadForm
 from app.services.processing_service import ejecutar_pipeline
 
+logger = logging.getLogger(__name__)
 
 # ================================================================
 # CONFIGURACIÓN DEL ROUTER
@@ -106,6 +112,11 @@ async def upload_video(
     El video se escribe en disco por chunks de 1 MiB: en ningún momento
     el contenido completo reside en RAM, lo que permite subidas concurrentes
     de archivos grandes sin agotar la memoria del servidor.
+
+    Garantía transaccional: Prospecto + archivo físico + ProcessingJob se
+    crean como una unidad atómica. Si cualquier paso falla, se revierten
+    los cambios de BD y se elimina el archivo físico ya escrito, de modo
+    que nunca quedan archivos huérfanos en disco.
     """
 
     # ============================================================
@@ -158,42 +169,48 @@ async def upload_video(
         )
 
     # ============================================================
-    # BLOQUE 4: CREAR EL PROSPECTO
-    # ============================================================
-    prospecto = Prospecto(
-        id_prospecto=uuid4(),
-        nombre_completo=form.nombre_completo,
-        grado_escolar=form.grado_escolar,
-        nombre_escuela=form.nombre_escuela,
-        nombre_acudiente=form.nombre_acudiente,
-        telefono=form.telefono,
-    )
-    db.add(prospecto)
-    db.flush()
-
-    # ============================================================
-    # BLOQUE 5: GUARDAR VIDEO EN DISCO (STREAMING — sin RAM completa)
+    # BLOQUES 4 + 5 + 6: UNIDAD TRANSACCIONAL
     #
-    # ★ CORRECCIÓN FASE 1 — crítico de performance:
-    #   Antes: content = await file.read()  → todo en RAM de golpe.
-    #   Ahora: leemos chunks de 1 MiB y los escribimos directamente a disco.
+    # ★ CORRECCIÓN FASE 2 — Paso 2 (archivo huérfano):
+    #   Antes: Prospecto se creaba con db.flush() ANTES del streaming,
+    #          y si después fallaba el db.commit(), el archivo físico
+    #          ya estaba en disco sin ProcessingJob asociado.
     #
-    # GARANTÍAS:
-    #   • Si el archivo supera MAX_VIDEO_SIZE_MB se lanza 413 y se borra
-    #     el archivo parcial (bloque except).
-    #   • El hash MD5 se calcula de forma incremental: mismo resultado
-    #     que antes, cero costo extra de memoria.
-    #   • Si ocurre cualquier otro error de I/O el except también limpia.
+    #   Ahora: Prospecto + disco + ProcessingJob se tratan como una
+    #          unidad atómica bajo un único try/except:
+    #            - HTTPException (ej. 413): rollback BD + borra archivo.
+    #            - Exception inesperada: rollback BD + borra archivo.
+    #            - finally: cierra siempre el UploadFile.
+    #
+    #   El background_tasks.add_task() se llama FUERA del try, solo
+    #   después de que db.commit() haya sido exitoso, garantizando que
+    #   job.id_job ya existe como verdad persistida en BD.
     # ============================================================
-    video_filename = f"{prospecto.id_prospecto}_{test_code}.{ext}"
-    video_path = UPLOAD_DIR / video_filename
-    video_path.parent.mkdir(parents=True, exist_ok=True)
-
-    max_bytes = settings.MAX_VIDEO_SIZE_MB * 1024 * 1024
-    bytes_written = 0
-    md5 = hashlib.md5()
+    video_path: Optional[Path] = None
+    job: Optional[ProcessingJob] = None
 
     try:
+        # ── BLOQUE 4: Crear Prospecto ────────────────────────────
+        prospecto = Prospecto(
+            id_prospecto=uuid4(),
+            nombre_completo=form.nombre_completo,
+            grado_escolar=form.grado_escolar,
+            nombre_escuela=form.nombre_escuela,
+            nombre_acudiente=form.nombre_acudiente,
+            telefono=form.telefono,
+        )
+        db.add(prospecto)
+        db.flush()  # Obtiene id_prospecto sin commit todavía
+
+        # ── BLOQUE 5: Guardar video en disco (streaming) ─────────
+        video_filename = f"{prospecto.id_prospecto}_{test_code}.{ext}"
+        video_path = UPLOAD_DIR / video_filename
+        video_path.parent.mkdir(parents=True, exist_ok=True)
+
+        max_bytes = settings.MAX_VIDEO_SIZE_MB * 1024 * 1024
+        bytes_written = 0
+        md5 = hashlib.md5()
+
         with video_path.open("wb") as out:
             while True:
                 chunk = await file.read(_CHUNK_SIZE)
@@ -201,7 +218,6 @@ async def upload_video(
                     break
                 bytes_written += len(chunk)
                 if bytes_written > max_bytes:
-                    # Abortar: supera el límite configurado.
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail=(
@@ -211,43 +227,67 @@ async def upload_video(
                     )
                 md5.update(chunk)
                 out.write(chunk)
+
+        file_hash = md5.hexdigest()
+
+        # ── BLOQUE 6: Crear ProcessingJob ────────────────────────
+        job = ProcessingJob(
+            id_prospecto=prospecto.id_prospecto,
+            id_template=template.id_template,
+            source_type="video",
+            file_path=str(video_path),
+            file_name_original=file.filename,
+            file_size_bytes=bytes_written,
+            file_hash=file_hash,
+            status="queued",
+            progress_percent=0,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+
+        logger.info(
+            "Job creado: %s | prospecto=%s | template=%s/%s | size=%.2f MB",
+            job.id_job,
+            prospecto.id_prospecto,
+            subject,
+            test_code,
+            bytes_written / (1024 * 1024),
+        )
+
     except HTTPException:
-        # Limpiar archivo parcial antes de propagar el 413.
-        if video_path.exists():
+        # 413, 400 u otro HTTP explícito: revertir BD y limpiar disco.
+        db.rollback()
+        if video_path and video_path.exists():
             os.remove(video_path)
+            logger.warning("Archivo eliminado tras HTTPException: %s", video_path)
         raise
+
     except Exception as exc:
-        # Error inesperado de I/O: limpiar y propagar.
-        if video_path.exists():
+        # Error inesperado (I/O, BD, etc.): revertir BD y limpiar disco.
+        db.rollback()
+        if video_path and video_path.exists():
             os.remove(video_path)
+            logger.error(
+                "Archivo eliminado tras error inesperado: %s | error: %s",
+                video_path,
+                exc,
+            )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error al guardar el video en disco.",
+            detail="Error al registrar el video. Intenta de nuevo.",
         ) from exc
 
-    file_hash = md5.hexdigest()
-
-    # ============================================================
-    # BLOQUE 6: CREAR PROCESSINGJOB
-    # ============================================================
-    job = ProcessingJob(
-        id_prospecto=prospecto.id_prospecto,
-        id_template=template.id_template,
-        source_type="video",
-        file_path=str(video_path),
-        file_name_original=file.filename,
-        file_size_bytes=bytes_written,
-        file_hash=file_hash,
-        status="queued",
-        progress_percent=0,
-    )
-
-    db.add(job)
-    db.commit()
-    db.refresh(job)
+    finally:
+        # El UploadFile se cierra SIEMPRE, independientemente del resultado.
+        await file.close()
 
     # ============================================================
     # BLOQUE 7: ENCOLAR EL PIPELINE EN SEGUNDO PLANO
+    #
+    # IMPORTANTE: este add_task() está FUERA del try/except, porque
+    # solo debe ejecutarse cuando el db.commit() fue exitoso y job.id_job
+    # ya es una referencia válida y persistida en la base de datos.
     # ============================================================
     background_tasks.add_task(ejecutar_pipeline, job.id_job)
 
