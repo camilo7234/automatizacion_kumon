@@ -1,27 +1,35 @@
 from __future__ import annotations
 
-
 """
 app/routes/upload.py
 ══════════════════════════════════════════════════════════════════
 Sube el video, crea el ProcessingJob y dispara el pipeline.
 
 FLUJO:
-  1. Valida tamaño y extensión del archivo.
+  1. Valida extensión del archivo (ANTES de leer contenido).
   2. Normaliza subject/test_code y verifica que exista TestTemplate activo.
   3. Crea Prospecto y ProcessingJob=queued.
-  4. Guarda el video en uploads/videos/.
+  4. Guarda el video en uploads/videos/ mediante streaming por chunks.
+     ★ FIX FASE 1: el video ya NO se carga completo en RAM.
+       Se escribe chunk a chunk y se va contando el tamaño en vuelo.
+       Si se supera MAX_VIDEO_SIZE_MB se aborta antes de terminar.
   5. Lanza ejecutar_pipeline(job_id) como BackgroundTask.
   6. Retorna JobStatusResponse inicial.
+
+CAMBIOS RESPECTO A LA VERSIÓN ANTERIOR:
+  - BLOQUE 2 (extensión) se ejecuta ANTES de tocar el body.
+  - BLOQUE 3 desaparece: content = await file.read() → eliminado.
+  - El guardado en disco (BLOQUE 6) es ahora streaming con chunks de 1 MiB.
+  - El hash MD5 (BLOQUE 7) se calcula incrementalmente durante el streaming.
+  - El rollback de archivo parcial ante error se hace en finally.
 ══════════════════════════════════════════════════════════════════
 """
 
-
 import hashlib
+import os
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
-
 
 from fastapi import (
     APIRouter,
@@ -34,7 +42,6 @@ from fastapi import (
     status,
 )
 from sqlalchemy.orm import Session
-
 
 from config.database import get_db
 from config.settings import settings
@@ -53,9 +60,12 @@ from app.services.processing_service import ejecutar_pipeline
 # ================================================================
 router = APIRouter(prefix="/api/v1/upload", tags=["upload"])
 
-# Directorio físico donde se guardan temporalmente los videos subidos.
-# Evita duplicar "videos" cuando settings.UPLOAD_DIR ya viene como uploads/videos.
-# Además, si settings.UPLOAD_DIR es relativo, lo resolvemos contra la raíz de backend.
+# Tamaño de cada chunk que se lee del stream de red (1 MiB).
+# Lo suficientemente grande para ser eficiente, lo suficientemente
+# pequeño para no saturar RAM en subidas concurrentes.
+_CHUNK_SIZE = 1 * 1024 * 1024  # 1 MiB
+
+# Directorio físico donde se guardan los videos subidos.
 BASE_DIR = Path(__file__).resolve().parents[2]
 
 _base_upload_dir = Path(settings.UPLOAD_DIR)
@@ -68,6 +78,7 @@ UPLOAD_DIR = (
     else _base_upload_dir.joinpath("videos")
 )
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 # ================================================================
 # ENDPOINT PRINCIPAL: SUBIDA DE VIDEO
@@ -92,34 +103,15 @@ async def upload_video(
     """
     Sube un video de prueba diagnóstica y crea un ProcessingJob.
 
-    Este endpoint no procesa el video en línea:
-    solo valida, guarda, encola el trabajo y retorna el estado inicial.
+    El video se escribe en disco por chunks de 1 MiB: en ningún momento
+    el contenido completo reside en RAM, lo que permite subidas concurrentes
+    de archivos grandes sin agotar la memoria del servidor.
     """
 
     # ============================================================
-    # BLOQUE 1: VALIDAR Y NORMALIZAR FORMULARIO
-    # ============================================================
-    form = VideoUploadForm(
-        subject=subject,
-        test_code=test_code,
-        nombre_completo=nombre_completo,
-        grado_escolar=grado_escolar,
-        nombre_escuela=nombre_escuela,
-        nombre_acudiente=nombre_acudiente,
-        telefono=telefono,
-    )
-
-    # Reasignamos los valores normalizados que devuelve el schema.
-    subject = form.subject
-    test_code = form.test_code
-
-    # ============================================================
-    # BLOQUE 2: VALIDAR EXTENSIÓN DEL VIDEO
+    # BLOQUE 1: VALIDAR EXTENSIÓN (antes de leer cualquier byte)
     # ============================================================
     ext = _get_extension(file.filename)
-
-    # ALLOWED_VIDEO_EXTENSIONS suele venir como set/lista de extensiones:
-    # por ejemplo {".mp4", ".avi", ".mov"}
     allowed_exts = {e.lower() for e in settings.ALLOWED_VIDEO_EXTENSIONS}
 
     if f".{ext}" not in allowed_exts:
@@ -132,22 +124,22 @@ async def upload_video(
         )
 
     # ============================================================
-    # BLOQUE 3: LEER ARCHIVO Y VALIDAR TAMAÑO
+    # BLOQUE 2: VALIDAR Y NORMALIZAR FORMULARIO
     # ============================================================
-    content = await file.read()
-    size_mb = len(content) / (1024 * 1024)
-
-    if size_mb > settings.MAX_VIDEO_SIZE_MB:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"El archivo supera el tamaño máximo de "
-                f"{settings.MAX_VIDEO_SIZE_MB} MB."
-            ),
-        )
+    form = VideoUploadForm(
+        subject=subject,
+        test_code=test_code,
+        nombre_completo=nombre_completo,
+        grado_escolar=grado_escolar,
+        nombre_escuela=nombre_escuela,
+        nombre_acudiente=nombre_acudiente,
+        telefono=telefono,
+    )
+    subject = form.subject
+    test_code = form.test_code
 
     # ============================================================
-    # BLOQUE 4: VALIDAR QUE EXISTA EL TEMPLATE ACTIVO
+    # BLOQUE 3: VALIDAR QUE EXISTA EL TEMPLATE ACTIVO
     # ============================================================
     template = (
         db.query(TestTemplate)
@@ -166,7 +158,7 @@ async def upload_video(
         )
 
     # ============================================================
-    # BLOQUE 5: CREAR EL PROSPECTO
+    # BLOQUE 4: CREAR EL PROSPECTO
     # ============================================================
     prospecto = Prospecto(
         id_prospecto=uuid4(),
@@ -176,33 +168,67 @@ async def upload_video(
         nombre_acudiente=form.nombre_acudiente,
         telefono=form.telefono,
     )
-
     db.add(prospecto)
     db.flush()
 
     # ============================================================
-    # BLOQUE 6: GUARDAR EL VIDEO EN DISCO
+    # BLOQUE 5: GUARDAR VIDEO EN DISCO (STREAMING — sin RAM completa)
+    #
+    # ★ CORRECCIÓN FASE 1 — crítico de performance:
+    #   Antes: content = await file.read()  → todo en RAM de golpe.
+    #   Ahora: leemos chunks de 1 MiB y los escribimos directamente a disco.
+    #
+    # GARANTÍAS:
+    #   • Si el archivo supera MAX_VIDEO_SIZE_MB se lanza 413 y se borra
+    #     el archivo parcial (bloque except).
+    #   • El hash MD5 se calcula de forma incremental: mismo resultado
+    #     que antes, cero costo extra de memoria.
+    #   • Si ocurre cualquier otro error de I/O el except también limpia.
     # ============================================================
     video_filename = f"{prospecto.id_prospecto}_{test_code}.{ext}"
-    video_path = UPLOAD_DIR.joinpath(video_filename)
-
-    # Defensa extra: asegurar que la carpeta exista en tiempo de escritura.
+    video_path = UPLOAD_DIR / video_filename
     video_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with video_path.open("wb") as out:
-        out.write(content)
-        
-    # ============================================================
-    # BLOQUE 7: CALCULAR HASH MD5 DEL ARCHIVO
-    # ============================================================
-    file_hash = hashlib.md5(content).hexdigest()
+    max_bytes = settings.MAX_VIDEO_SIZE_MB * 1024 * 1024
+    bytes_written = 0
+    md5 = hashlib.md5()
+
+    try:
+        with video_path.open("wb") as out:
+            while True:
+                chunk = await file.read(_CHUNK_SIZE)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > max_bytes:
+                    # Abortar: supera el límite configurado.
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=(
+                            f"El archivo supera el tamaño máximo de "
+                            f"{settings.MAX_VIDEO_SIZE_MB} MB."
+                        ),
+                    )
+                md5.update(chunk)
+                out.write(chunk)
+    except HTTPException:
+        # Limpiar archivo parcial antes de propagar el 413.
+        if video_path.exists():
+            os.remove(video_path)
+        raise
+    except Exception as exc:
+        # Error inesperado de I/O: limpiar y propagar.
+        if video_path.exists():
+            os.remove(video_path)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al guardar el video en disco.",
+        ) from exc
+
+    file_hash = md5.hexdigest()
 
     # ============================================================
-    # BLOQUE 8: CREAR PROCESSINGJOB
-    #
-    # IMPORTANTE:
-    # Este bloque ya está alineado con database/models.py.
-    # NO usa subject, test_code, source_path ni source_hash.
+    # BLOQUE 6: CREAR PROCESSINGJOB
     # ============================================================
     job = ProcessingJob(
         id_prospecto=prospecto.id_prospecto,
@@ -210,7 +236,7 @@ async def upload_video(
         source_type="video",
         file_path=str(video_path),
         file_name_original=file.filename,
-        file_size_bytes=len(content),
+        file_size_bytes=bytes_written,
         file_hash=file_hash,
         status="queued",
         progress_percent=0,
@@ -221,12 +247,12 @@ async def upload_video(
     db.refresh(job)
 
     # ============================================================
-    # BLOQUE 9: ENCOLAR EL PIPELINE EN SEGUNDO PLANO
+    # BLOQUE 7: ENCOLAR EL PIPELINE EN SEGUNDO PLANO
     # ============================================================
     background_tasks.add_task(ejecutar_pipeline, job.id_job)
 
     # ============================================================
-    # BLOQUE 10: RESPUESTA INICIAL AL FRONTEND
+    # BLOQUE 8: RESPUESTA INICIAL AL FRONTEND
     # ============================================================
     return JobStatusResponse(
         job_id=job.id_job,
@@ -239,9 +265,8 @@ async def upload_video(
     )
 
 
-
 # ================================================================
-# FUNCION AUXILIAR: EXTRAER EXTENSIÓN DEL NOMBRE DE ARCHIVO
+# FUNCIÓN AUXILIAR: EXTRAER EXTENSIÓN DEL NOMBRE DE ARCHIVO
 # ================================================================
 def _get_extension(filename: Optional[str]) -> str:
     """
