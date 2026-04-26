@@ -2,18 +2,18 @@
    KUMON · MÓDULO UPLOAD
    Archivo: frontend/css/modules/upload.css
    Depende de: tokens.css, components.css
-   Clases alineadas con index.html:
+   Clases alineadas con index.html y upload.js:
    .upload-form · .upload-dropzone · .dropzone-inner
    .dropzone-icon · .dropzone-label · .dropzone-browse
    .dropzone-filename · .dropzone-hint
-   .upload-progress → .progress-wrap (components.css)
+   .drag-over → añadida por upload.js (classList.add)
+   .has-file  → añadida por upload.js (classList.add)
    ============================================================ */
 
 
 /* ══════════════════════════════════════════════
    FORMULARIO CONTENEDOR
    padding viene de layout.css → .upload-form
-   aquí solo gaps internos
    ══════════════════════════════════════════════ */
 .upload-form {
   display:        flex;
@@ -38,17 +38,19 @@
     box-shadow   var(--transition);
 }
 
+/* FIX: upload.js usa classList.add('drag-over') — con guión */
 .upload-dropzone:hover,
-.upload-dropzone.dragover {
-  border-color: var(--primary-2);
+.upload-dropzone.drag-over {
+  border-color: var(--primary);
   background:   var(--primary-3);
-  box-shadow:   0 0 0 4px rgba(10, 116, 218, 0.10);
+  box-shadow:   0 0 0 4px rgba(32, 140, 188, 0.10);
 }
 
 .upload-dropzone.has-file {
   border-color: var(--success);
   background:   var(--success-bg);
 }
+
 
 /* Contenedor interior centrado */
 .dropzone-inner {
@@ -59,31 +61,32 @@
   gap:             var(--space-3);
   padding:         var(--space-10) var(--space-6);
   text-align:      center;
-  pointer-events:  none; /* clicks pasan al dropzone padre */
+  pointer-events:  none;
 }
 
 /* El label del input sí necesita recibir clicks */
 .dropzone-browse {
-  pointer-events: auto;
-  color:          var(--primary);
-  font-weight:    700;
-  cursor:         pointer;
-  text-decoration: underline;
+  pointer-events:       auto;
+  color:                var(--primary);
+  font-weight:          700;
+  cursor:               pointer;
+  text-decoration:      underline;
   text-underline-offset: 2px;
 }
 
 .dropzone-browse:hover { color: var(--primary-2); }
 
+
 /* Ícono SVG */
 .dropzone-icon {
-  width:  48px;
-  height: 48px;
-  color:  var(--muted);
+  width:      48px;
+  height:     48px;
+  color:      var(--muted);
   transition: color var(--transition);
 }
 
 .upload-dropzone:hover .dropzone-icon,
-.upload-dropzone.dragover .dropzone-icon {
+.upload-dropzone.drag-over .dropzone-icon {
   color: var(--primary);
 }
 
@@ -91,21 +94,25 @@
   color: var(--success);
 }
 
+
 /* Texto principal */
 .dropzone-label {
   font-size:   var(--text-sm);
   font-weight: 600;
   color:       var(--text);
+  max-width:   none;
 }
 
 /* Hint de formatos */
 .dropzone-hint {
   font-size: var(--text-xs);
   color:     var(--muted);
+  max-width: none;
 }
 
+
 /* Nombre del archivo seleccionado
-   id="uploadDropFilename" — texto inyectado por upload.js */
+   id="uploadDropFilename" — textContent inyectado por upload.js */
 .dropzone-filename {
   font-size:     var(--text-xs);
   font-weight:   600;
@@ -114,21 +121,19 @@
   background:    var(--success-bg);
   border:        1px solid var(--success-line);
   border-radius: var(--radius-full);
-  max-width:     100%;
+  max-width:     90%;
   overflow:      hidden;
   text-overflow: ellipsis;
   white-space:   nowrap;
 }
 
-/* Ocultar cuando vacío */
 .dropzone-filename:empty { display: none; }
 
 
 /* ══════════════════════════════════════════════
    BARRA DE PROGRESO DE SUBIDA
-   #uploadProgressWrap — usa .progress-wrap de
-   components.css. Este bloque solo ajusta
-   el gap vertical dentro del form.
+   #uploadProgressWrap — extiende .progress-wrap
+   de components.css; aquí solo ajusta dirección
    ══════════════════════════════════════════════ */
 #uploadProgressWrap {
   flex-direction: column;
@@ -142,7 +147,7 @@
 
 
 /* ══════════════════════════════════════════════
-   SPINNER — usado en upload loading state
+   SPINNER
    ══════════════════════════════════════════════ */
 @keyframes spin {
   to { transform: rotate(360deg); }

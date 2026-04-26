@@ -2,38 +2,33 @@
    KUMON · MÓDULO RESULTADO
    Archivo: frontend/css/modules/result.css
    Depende de: tokens.css, components.css
-   Clases alineadas con index.html:
-   #resultBlock · .result-block
-   .result-hero · .result-hero-info
-   #resultHeroStudent → .result-student-name
-   #resultHeroLevel   → .result-student-level
-   #heroConfidence    → .confidence-badge (components.css)
-   #manualReviewBanner → .review-banner (components.css)
-   #semaforoBlock · #semaforoIcon · #semaforoLabel
-   #kpiGrid · #detailsGrid · #recommendationBox
-   #validationNotice
+   REGLA: Este archivo NO redefine clases de components.css.
+   Solo define: hero, semáforo, y overrides contextuales.
+   Clases generadas por resultado.js verificadas contra
+   el fuente real de resultado.js.
    ============================================================ */
 
 
 /* ══════════════════════════════════════════════
-   BLOQUE CONTENEDOR PRINCIPAL
+   BLOQUE CONTENEDOR
    #resultBlock.result-block
    padding viene de layout.css
    ══════════════════════════════════════════════ */
 .result-block {
   display:        flex;
   flex-direction: column;
-  gap:            var(--space-5);
+  gap:            var(--space-4);
 }
 
 
 /* ══════════════════════════════════════════════
    HERO — nombre + nivel + confianza OCR
-   .result-hero
+   Fondo de gradiente → overrides de components.css
+   para .confidence-badge son contextuales aquí
    ══════════════════════════════════════════════ */
 .result-hero {
   display:         flex;
-  align-items:     flex-start;
+  align-items:     center;
   justify-content: space-between;
   gap:             var(--space-4);
   flex-wrap:       wrap;
@@ -50,8 +45,9 @@
   position:       absolute;
   top:            -40px;
   right:          -40px;
-  width:          160px;
-  height:         160px;
+  width:          120px;
+  height:         120px;
+  opacity:        0.6;
   border-radius:  var(--radius-full);
   background:     rgba(255,255,255,0.06);
   pointer-events: none;
@@ -65,7 +61,7 @@
   z-index:        1;
 }
 
-/* #resultHeroStudent */
+/* #resultHeroStudent — data.nombre_sujeto */
 .result-student-name {
   font-size:   var(--text-xl);
   font-weight: 800;
@@ -73,49 +69,52 @@
   line-height: 1.1;
 }
 
-/* #resultHeroLevel */
+/* #resultHeroLevel — data.ws */
 .result-student-level {
   font-size:   var(--text-sm);
   color:       rgba(255,255,255,0.78);
   font-weight: 500;
+  max-width:   none;
 }
 
-/* #heroConfidence — .confidence-badge está en components.css
-   Aquí solo sobreescribimos colores para que funcione
-   sobre el fondo de gradiente */
+/* Override contextual de .confidence-badge (components.css)
+   para que funcione sobre fondo de gradiente oscuro */
 .result-hero .confidence-badge {
-  position:      relative;
-  z-index:       1;
-  background:    rgba(255,255,255,0.18);
-  border-color:  rgba(255,255,255,0.30);
-  flex-shrink:   0;
-  align-self:    flex-start;
+  position:     relative;
+  z-index:      1;
+  background:   rgba(255,255,255,0.18);
+  border-color: rgba(255,255,255,0.30);
+  flex-shrink:  0;
+  align-self:   flex-start;
 }
 
-.result-hero .confidence-label {
-  color: rgba(255,255,255,0.80);
-}
+.result-hero .confidence-label { color: rgba(255,255,255,0.80); }
+.result-hero .confidence-value { color: #fff; }
 
-.result-hero .confidence-value {
-  color: #fff;
-}
+/* Cuando resultado.js añade .warn o .alert al #heroConfidence,
+   el override de color lo mantiene legible sobre el gradiente */
+.result-hero .confidence-badge.warn  { background: rgba(251,191,36,0.25);  border-color: rgba(251,191,36,0.50); }
+.result-hero .confidence-badge.alert { background: rgba(248,113,113,0.25); border-color: rgba(248,113,113,0.50); }
+.result-hero .confidence-badge.warn  .confidence-value  { color: #fef3c7; }
+.result-hero .confidence-badge.alert .confidence-value  { color: #fee2e2; }
 
 
 /* ══════════════════════════════════════════════
    SEMÁFORO
    #semaforoBlock · #semaforoIcon · #semaforoLabel
-   La clase de color (verde/amarillo/rojo) es
-   añadida por resultado.js → _renderSemaforo
+   resultado.js asigna .verde / .amarillo / .rojo
+   al .semaforoBlock según data.semaforo
    ══════════════════════════════════════════════ */
 .semaforo-block {
   display:        flex;
   flex-direction: column;
   align-items:    center;
   gap:            var(--space-3);
-  padding:        var(--space-5) var(--space-4);
+  padding:        var(--space-6) var(--space-4);
   border-radius:  var(--radius-md);
   border:         1px solid var(--line);
   text-align:     center;
+  background:     var(--surface-2);
   transition:     background var(--transition), border-color var(--transition);
 }
 
@@ -123,122 +122,59 @@
 .semaforo-block.amarillo { background: var(--warning-bg);  border-color: var(--warning-line); }
 .semaforo-block.rojo     { background: var(--danger-bg);   border-color: var(--danger-line); }
 
-/* #semaforoIcon — emoji inyectado por resultado.js */
+/* #semaforoIcon — emoji inyectado por resultado.js → semaforoEmoji() */
 .semaforo-icon {
   font-size:   2.8rem;
   line-height: 1;
 }
 
-/* #semaforoLabel */
+/* #semaforoLabel — texto inyectado por resultado.js → semaforoLabelText() */
 .semaforo-label {
   font-size:      var(--text-sm);
   font-weight:    700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  color:          var(--muted);
 }
 
+/* Color del label según variante del bloque contenedor
+   (no usar .tone-* aquí — el JS lo pone en .semaforoBlock, no en el label) */
 .semaforo-block.verde    .semaforo-label { color: var(--semaforo-verde); }
 .semaforo-block.amarillo .semaforo-label { color: var(--semaforo-amarillo); }
 .semaforo-block.rojo     .semaforo-label { color: var(--semaforo-rojo); }
 
 
 /* ══════════════════════════════════════════════
-   KPI GRID
-   #kpiGrid — innerHTML generado por resultado.js
-   Genera .kpi-card con .kpi-value y .kpi-label
+   KPI GRID — override de tamaño de valor
+   El grid base y las .kpi-card están en components.css.
+   Solo sobreescribimos el tamaño de .kpi-value
+   para esta sección (más grande que en el boletín).
    ══════════════════════════════════════════════ */
-.kpi-grid {
-  display:               grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap:                   var(--space-3);
-}
-
-.kpi-card {
-  display:        flex;
-  flex-direction: column;
-  align-items:    center;
-  gap:            var(--space-1);
-  padding:        var(--space-4) var(--space-3);
-  background:     var(--surface-2);
-  border:         1px solid var(--line);
-  border-radius:  var(--radius-md);
-  text-align:     center;
-}
-
-.kpi-value {
-  font-size:   var(--text-2xl);
+.result-block .kpi-value {
+  font-size: var(--text-2xl);
   font-weight: 900;
-  color:       var(--primary);
-  line-height: 1;
-}
-
-.kpi-value.highlight { color: var(--semaforo-verde); }
-.kpi-value.warn      { color: var(--semaforo-amarillo); }
-.kpi-value.alert     { color: var(--semaforo-rojo); }
-
-.kpi-label {
-  font-size:      var(--text-xs);
-  color:          var(--muted);
-  font-weight:    500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  line-height:    1.3;
 }
 
 
 /* ══════════════════════════════════════════════
-   DETAILS GRID
-   #detailsGrid — usa .details-grid + .detail-box
-   de components.css · aquí solo override de padding
+   DETAILS GRID — NO redefinir aquí.
+   .details-grid, .detail-row, .detail-label,
+   .detail-value están definidos en components.css.
+   Sin reglas en este archivo para esas clases.
    ══════════════════════════════════════════════ */
-.details-grid {
-  display:               grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap:                   var(--space-3);
-}
 
 
 /* ══════════════════════════════════════════════
-   RECOMENDACIÓN PEDAGÓGICA
-   #recommendationBox.recommendation-box
-   innerHTML generado por resultado.js
+   RECOMMENDATION BOX — NO redefinir aquí.
+   .recommendation-box, .recommendation-label,
+   .recommendation-text están en components.css.
+   Sin reglas en este archivo para esas clases.
    ══════════════════════════════════════════════ */
-.recommendation-box {
-  padding:       var(--space-4);
-  background:    var(--info-bg);
-  border:        1px solid var(--info-line);
-  border-radius: var(--radius-sm);
-  font-size:     var(--text-sm);
-  color:         var(--info-text);
-  line-height:   1.6;
-}
-
-.recommendation-box strong {
-  display:        block;
-  font-size:      var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom:  var(--space-2);
-  color:          var(--primary);
-  font-weight:    700;
-}
 
 
 /* ══════════════════════════════════════════════
-   VALIDATION NOTICE
-   #validationNotice.validation-notice
-   innerHTML generado por resultado.js
+   VALIDATION NOTICE — NO redefinir aquí.
+   .validation-notice, .notice-icon
+   están definidos en components.css.
+   Sin reglas en este archivo para esas clases.
    ══════════════════════════════════════════════ */
-.validation-notice {
-  display:      flex;
-  align-items:  center;
-  gap:          var(--space-3);
-  padding:      var(--space-4);
-  background:   var(--warning-bg);
-  border:       1px solid var(--warning-line);
-  border-radius: var(--radius-sm);
-  font-size:    var(--text-sm);
-  color:        var(--warning-text);
-  font-weight:  500;
-  line-height:  1.5;
-}

@@ -32,14 +32,24 @@ body {
   font-size: var(--text-base);
   line-height: 1.6;
   color: var(--text);
-  background: var(--grad-bg);
+
+  /* 🔧 CAMBIO CLAVE: fondo más limpio y controlado */
+  background: var(--bg);
 }
 
 /* ── ELEMENTOS VISUALES ── */
-img, picture, video, canvas, svg {
+img, picture, video, canvas {
   display: block;
   max-width: 100%;
   height: auto;
+}
+
+svg {
+  display: inline-block;
+  flex-shrink: 0;
+
+  /* 🔧 FIX visual */
+  vertical-align: middle;
 }
 
 /* ── TIPOGRAFÍA ── */
@@ -74,6 +84,24 @@ button {
   cursor: pointer;
   background: none;
   border: none;
+}
+
+/* 🔧 NUEVO: base consistente para inputs */
+input, select, textarea {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* 🔧 NUEVO: estados disabled alineados con UX */
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled,
+[aria-disabled="true"] {
+  opacity: var(--disabled-opacity);
+  cursor: not-allowed;
 }
 
 /* ── TABLAS ── */

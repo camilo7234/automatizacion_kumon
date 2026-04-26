@@ -3,6 +3,7 @@
    Archivo: frontend/css/components.css
    Depende de: tokens.css, base.css
    Clases alineadas con index.html y los módulos JS.
+   CRÍTICO: Incluye clases generadas dinámicamente por JS.
    ============================================================ */
 
 
@@ -14,14 +15,14 @@
   align-items:     center;
   justify-content: center;
   gap:             var(--space-2);
-  padding:         0.55rem var(--space-5);
+  padding:         0 var(--space-5);
+  height:          44px;
   font-size:       var(--text-sm);
   font-weight:     600;
   border-radius:   var(--radius-full);
   border:          1.5px solid transparent;
   cursor:          pointer;
   white-space:     nowrap;
-  min-height:      44px;
   transition:
     background     var(--transition),
     border-color   var(--transition),
@@ -39,10 +40,10 @@
   background:   var(--primary);
   color:        #fff;
   border-color: var(--primary);
-  box-shadow:   0 2px 10px rgba(0, 91, 187, 0.22);
+  box-shadow:   0 2px 10px rgba(32, 140, 188, 0.25);
 }
-.btn-primary:hover  { background: var(--primary-2); border-color: var(--primary-2); box-shadow: 0 4px 14px rgba(0,91,187,0.3); }
-.btn-primary:active { background: #004a99; box-shadow: none; }
+.btn-primary:hover  { background: var(--primary-2); border-color: var(--primary-2); box-shadow: 0 4px 14px rgba(32,140,188,0.35); }
+.btn-primary:active { background: var(--primary-2); box-shadow: none; }
 
 .btn-secondary {
   background:   var(--surface);
@@ -50,8 +51,8 @@
   border-color: var(--line);
   box-shadow:   var(--shadow-sm);
 }
-.btn-secondary:hover  { border-color: var(--primary-2); background: var(--primary-3); }
-.btn-secondary:active { background: #dde9f8; }
+.btn-secondary:hover  { border-color: var(--primary); background: var(--primary-3); }
+.btn-secondary:active { background: var(--surface-3); }
 
 .btn-ghost {
   background:   transparent;
@@ -73,7 +74,7 @@
 /* ══════════════════════════════════════════════
    ALERTAS
    id="uploadAlert", "resultAlert", etc.
-   Controladas por ui.js → setAlert/clearAlert
+   Controladas por ui.js → setAlert / clearAlert
    ══════════════════════════════════════════════ */
 .alert {
   display:       flex;
@@ -95,6 +96,7 @@
 /* ══════════════════════════════════════════════
    TAGS / BADGES
    .tag · .tag-success · .tag-warning etc.
+   Generados por ui.js → setTag(target, text, type)
    ══════════════════════════════════════════════ */
 .tag {
   display:        inline-flex;
@@ -108,12 +110,12 @@
   white-space:    nowrap;
 }
 
-.tag-default { background: var(--surface-2); color: var(--muted);        border: 1px solid var(--line); }
-.tag-success { background: var(--success-bg); color: var(--success);     border: 1px solid var(--success-line); }
-.tag-warning { background: var(--warning-bg); color: var(--warning-text);border: 1px solid var(--warning-line); }
-.tag-danger  { background: var(--danger-bg);  color: var(--danger);      border: 1px solid var(--danger-line); }
-.tag-info    { background: var(--info-bg);    color: var(--info-text);   border: 1px solid var(--info-line); }
-.tag-primary { background: var(--primary-3);  color: var(--primary);     border: 1px solid rgba(0,91,187,0.2); }
+.tag-default { background: var(--surface-2);  color: var(--muted);        border: 1px solid var(--line); }
+.tag-success { background: var(--success-bg); color: var(--success);      border: 1px solid var(--success-line); }
+.tag-warning { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-line); }
+.tag-danger  { background: var(--danger-bg);  color: var(--danger);       border: 1px solid var(--danger-line); }
+.tag-info    { background: var(--info-bg);    color: var(--info-text);    border: 1px solid var(--info-line); }
+.tag-primary { background: var(--primary-3);  color: var(--primary);      border: 1px solid rgba(32,140,188,0.2); }
 
 
 /* ══════════════════════════════════════════════
@@ -168,8 +170,8 @@
 .form-input:focus,
 .form-textarea:focus,
 .form-select:focus {
-  border-color: var(--primary-2);
-  box-shadow:   0 0 0 3px rgba(10, 116, 218, 0.14);
+  border-color: var(--primary);
+  box-shadow:   0 0 0 3px rgba(32, 140, 188, 0.18);
   outline:      none;
 }
 
@@ -179,7 +181,6 @@
   line-height: 1.55;
 }
 
-/* Fila de 2 campos en paralelo */
 .form-row {
   display:               grid;
   grid-template-columns: 1fr 1fr;
@@ -190,7 +191,6 @@
   .form-row { grid-template-columns: 1fr; }
 }
 
-/* Acciones del form — alineadas a la derecha */
 .form-actions {
   display:         flex;
   gap:             var(--space-3);
@@ -200,10 +200,7 @@
 }
 
 @media (max-width: 480px) {
-  .form-actions {
-    flex-direction: column;
-    align-items:    stretch;
-  }
+  .form-actions { flex-direction: column; align-items: stretch; }
   .form-actions .btn { width: 100%; justify-content: center; }
 }
 
@@ -212,6 +209,8 @@
    BARRA DE PROGRESO
    .progress-wrap · .progress-bar
    .progress-bar-fill · .progress-pct
+   Usada en upload (#uploadProgressWrap) y
+   pipeline (#jobProgressBar)
    ══════════════════════════════════════════════ */
 .progress-wrap {
   display:     flex;
@@ -231,7 +230,7 @@
   height:        100%;
   background:    var(--grad-hero);
   border-radius: var(--radius-full);
-  transition:    width 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:    width 0.35s ease;
   width:         0%;
 }
 
@@ -247,7 +246,9 @@
 /* ══════════════════════════════════════════════
    BANNER DE REVISIÓN MANUAL
    #manualReviewBanner · #boletinManualReviewBanner
-   innerHTML gestionado por resultado.js / boletin.js
+   innerHTML generado por resultado.js / boletin.js:
+   <span class="banner-icon">⚠️</span>
+   <span>…texto…</span>
    ══════════════════════════════════════════════ */
 .review-banner {
   display:       flex;
@@ -263,22 +264,64 @@
   line-height:   1.5;
 }
 
-
-/* ══════════════════════════════════════════════
-   DETAIL BOX — celdas de métricas
-   Usado en resultado.js → _renderKpiGrid
-   ══════════════════════════════════════════════ */
-.detail-box {
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--space-1);
-  padding:        var(--space-3) var(--space-4);
-  background:     var(--surface-2);
-  border:         1px solid var(--line);
-  border-radius:  var(--radius-sm);
+/* Clase generada por resultado.js / boletin.js */
+.banner-icon {
+  font-size:   1.1em;
+  flex-shrink: 0;
+  margin-top:  1px;
 }
 
-.detail-box span {
+
+/* ══════════════════════════════════════════════
+   KPI GRID
+   #kpiGrid → generado por resultado.js → _renderKpis()
+   Estructura generada:
+   <div class="kpi-card tone-{success|warning|danger|neutral}">
+     <span class="kpi-icon">📊</span>
+     <span class="kpi-value">87%</span>
+     <span class="kpi-label">Porcentaje</span>
+   </div>
+   ══════════════════════════════════════════════ */
+.kpi-grid {
+  display:               grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap:                   var(--space-3);
+}
+
+@media (max-width: 700px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 380px) {
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+}
+
+.kpi-card {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            var(--space-1);
+  padding:        var(--space-4) var(--space-3);
+  background:     var(--surface-2);
+  border:         1px solid var(--line);
+  border-radius:  var(--radius-md);
+  text-align:     center;
+  transition:     box-shadow var(--transition);
+}
+
+.kpi-icon {
+  font-size:   1.4rem;
+  line-height: 1;
+}
+
+.kpi-value {
+  font-size:   var(--text-xl);
+  font-weight: 800;
+  color:       var(--text);
+  line-height: 1.1;
+}
+
+.kpi-label {
   font-size:      var(--text-xs);
   color:          var(--muted);
   font-weight:    500;
@@ -286,17 +329,130 @@
   letter-spacing: 0.04em;
 }
 
-.detail-box strong {
-  font-size:   var(--text-base);
-  font-weight: 700;
+/* Variantes de tono — aplicadas al .kpi-card por resultado.js */
+.kpi-card.tone-success { border-color: var(--success-line); background: var(--success-bg); }
+.kpi-card.tone-success .kpi-value { color: var(--success); }
+
+.kpi-card.tone-warning { border-color: var(--warning-line); background: var(--warning-bg); }
+.kpi-card.tone-warning .kpi-value { color: var(--warning); }
+
+.kpi-card.tone-danger  { border-color: var(--danger-line);  background: var(--danger-bg); }
+.kpi-card.tone-danger  .kpi-value { color: var(--danger); }
+
+.kpi-card.tone-neutral { border-color: var(--line); background: var(--surface-2); }
+.kpi-card.tone-neutral .kpi-value { color: var(--text); }
+
+
+/* ══════════════════════════════════════════════
+   DETAILS GRID
+   #detailsGrid → generado por resultado.js → _renderDetails()
+   Estructura generada:
+   <div class="detail-row">
+     <span class="detail-label">Prueba</span>
+     <span class="detail-value">K1-MAT</span>
+   </div>
+   ══════════════════════════════════════════════ */
+.details-grid {
+  display:        flex;
+  flex-direction: column;
+  gap:            2px;
+  border:         1px solid var(--line);
+  border-radius:  var(--radius-md);
+  overflow:       hidden;
+}
+
+.detail-row {
+  display:         grid;
+  grid-template-columns: minmax(120px, 35%) 1fr;
+  align-items:     start;
+  gap:             var(--space-3);
+  padding:         var(--space-2) var(--space-4);
+  background:      var(--surface);
+  border-bottom:   1px solid var(--line);
+  transition:      background var(--transition);
+}
+
+.detail-row:last-child  { border-bottom: none; }
+.detail-row:nth-child(even) { background: var(--surface-2); }
+
+.detail-label {
+  font-size:      var(--text-xs);
+  color:          var(--muted);
+  font-weight:    600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-value {
+  font-size:   var(--text-sm);
+  font-weight: 600;
   color:       var(--text);
 }
 
-.details-grid {
-  display:               grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap:                   var(--space-3);
+
+/* ══════════════════════════════════════════════
+   RECOMMENDATION BOX
+   #recommendationBox → generado por resultado.js
+   Estructura generada:
+   <p class="recommendation-label">💡 Recomendación</p>
+   <p class="recommendation-text">…texto…</p>
+   ══════════════════════════════════════════════ */
+.recommendation-box {
+  padding:       var(--space-4);
+  background:    var(--primary-3);
+  border:        1px solid rgba(32, 140, 188, 0.2);
+  border-left:   4px solid var(--primary);
+  border-radius: var(--radius-md);
 }
+
+.recommendation-label {
+  font-size:   var(--text-sm);
+  font-weight: 700;
+  color:       var(--primary-2);
+  margin-bottom: var(--space-2);
+  max-width:   none;
+}
+
+.recommendation-text {
+  font-size:   var(--text-sm);
+  color:       var(--text);
+  line-height: 1.6;
+  max-width:   none;
+}
+
+
+/* ══════════════════════════════════════════════
+   VALIDATION NOTICE
+   #validationNotice → generado por resultado.js
+   Estructura generada:
+   <span class="notice-icon">📋</span>
+   <span>…texto…</span>
+   ══════════════════════════════════════════════ */
+.validation-notice {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--space-3);
+  padding:       var(--space-3) var(--space-4);
+  background:    var(--info-bg);
+  border:        1px solid var(--info-line);
+  border-radius: var(--radius-sm);
+  font-size:     var(--text-sm);
+  color:         var(--info-text);
+}
+
+.notice-icon {
+  font-size:   1.1em;
+  flex-shrink: 0;
+}
+
+
+/* ══════════════════════════════════════════════
+   SEMÁFORO — tono en label del boletín
+   boletin.js asigna: className = "semaforo-label tone-{verde|amarillo|rojo}"
+   ══════════════════════════════════════════════ */
+.semaforo-label.tone-verde    { color: var(--semaforo-verde); }
+.semaforo-label.tone-amarillo { color: var(--semaforo-amarillo); }
+.semaforo-label.tone-rojo     { color: var(--semaforo-rojo); }
 
 
 /* ══════════════════════════════════════════════
@@ -324,19 +480,26 @@
   color:       var(--text);
 }
 
-/* Dot de confianza en boletín */
+/* Dot de confianza en boletín — #boletinConfidenceDot */
 .confidence-dot {
   display:       inline-block;
   width:         10px;
   height:        10px;
   border-radius: var(--radius-full);
-  background:    var(--success);    /* verde por defecto */
+  background:    var(--success);
   flex-shrink:   0;
   transition:    background var(--transition);
 }
 
+/* Clases asignadas por resultado.js / boletin.js → confidenceDotClass() */
 .confidence-dot.warn  { background: var(--warning); }
 .confidence-dot.alert { background: var(--danger); }
+
+/* heroConfidence también recibe .warn / .alert como clase en el badge */
+.confidence-badge.warn  { border-color: var(--warning-line); background: var(--warning-bg); }
+.confidence-badge.warn  .confidence-value { color: var(--warning); }
+.confidence-badge.alert { border-color: var(--danger-line);  background: var(--danger-bg); }
+.confidence-badge.alert .confidence-value { color: var(--danger); }
 
 .confidence-pct {
   font-size:   var(--text-xs);

@@ -2,10 +2,11 @@
    KUMON · MÓDULO PIPELINE
    Archivo: frontend/css/modules/pipeline.css
    Depende de: tokens.css, components.css
-   Clases alineadas con index.html:
+   Clases alineadas con index.html y polling.js:
    .pipeline-steps (ol) · .pipeline-step (li)
    .step-icon · .step-label · .step-status
-   Estados JS: pending → active → done → error
+   Estados JS: active · completed · error · warning
+   (polling.js usa 'completed', NO 'done')
    data-step: upload|queued|processing|done|validated|boletin
    ============================================================ */
 
@@ -15,14 +16,14 @@
    ol.pipeline-steps
    ══════════════════════════════════════════════ */
 .pipeline-steps {
-  list-style:  none;
-  display:     flex;
-  flex-wrap:   nowrap;
-  gap:         0;
-  align-items: flex-start;
-  overflow-x:  auto;
+  list-style:      none;
+  display:         flex;
+  flex-wrap:       nowrap;
+  gap:             0;
+  align-items:     flex-start;
+  overflow-x:      auto;
   scrollbar-width: none;
-  padding-bottom: var(--space-5);
+  padding-bottom:  var(--space-5);
 }
 
 .pipeline-steps::-webkit-scrollbar { display: none; }
@@ -60,8 +61,7 @@
 
 
 /* ── ÍCONO DEL PASO ──
-   span.step-icon — texto/emoji inyectado por polling.js
-   Funciona como el círculo indicador */
+   span.step-icon — contenido inyectado por polling.js */
 .step-icon {
   width:           36px;
   height:          36px;
@@ -84,9 +84,7 @@
     box-shadow   var(--transition);
 }
 
-
-/* ── LABEL DEL PASO ──
-   span.step-label — texto fijo del HTML */
+/* ── LABEL DEL PASO ── */
 .step-label {
   font-size:   var(--text-xs);
   color:       var(--muted);
@@ -96,10 +94,8 @@
   transition:  color var(--transition);
 }
 
-
 /* ── STATUS DEL PASO ──
-   span.step-status — texto inyectado por polling.js
-   (ej: "Completado", "En proceso...") */
+   span.step-status — texto inyectado por polling.js */
 .step-status {
   font-size:   var(--text-xs);
   color:       var(--muted);
@@ -110,33 +106,23 @@
 
 
 /* ══════════════════════════════════════════════
-   ESTADO: ACTIVE
-   Clase añadida por polling.js → _updatePipelineStep
+   ESTADO: ACTIVE — paso en curso
+   polling.js: classList.add('active')
    ══════════════════════════════════════════════ */
 .pipeline-step.active .step-icon {
   background:   var(--primary-3);
-  border-color: var(--primary-2);
+  border-color: var(--primary);
   color:        var(--primary);
-  box-shadow:   0 0 0 4px rgba(10, 116, 218, 0.14);
+  animation:    pulse-ring 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
-.pipeline-step.active .step-label {
-  color:       var(--primary);
-  font-weight: 700;
-}
-
-.pipeline-step.active .step-status {
-  color: var(--primary);
-}
+.pipeline-step.active .step-label  { color: var(--primary); font-weight: 700; }
+.pipeline-step.active .step-status { color: var(--primary); }
 
 @keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0   rgba(10, 116, 218, 0.30); }
-  70%  { box-shadow: 0 0 0 8px rgba(10, 116, 218, 0); }
-  100% { box-shadow: 0 0 0 0   rgba(10, 116, 218, 0); }
-}
-
-.pipeline-step.active .step-icon {
-  animation: pulse-ring 1.8s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  0%   { box-shadow: 0 0 0 0   rgba(32, 140, 188, 0.35); }
+  70%  { box-shadow: 0 0 0 8px rgba(32, 140, 188, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(32, 140, 188, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -145,31 +131,26 @@
 
 
 /* ══════════════════════════════════════════════
-   ESTADO: DONE
+   ESTADO: COMPLETED — paso ya finalizado
+   FIX: polling.js usa classList.add('completed'), NO 'done'
    ══════════════════════════════════════════════ */
-.pipeline-step.done .step-icon {
+.pipeline-step.completed .step-icon {
   background:   var(--success);
   border-color: var(--success);
   color:        #fff;
-  box-shadow:   0 2px 8px rgba(31, 143, 95, 0.25);
+  box-shadow:   0 2px 8px rgba(31, 143, 95, 0.22);
 }
 
-.pipeline-step.done .step-label {
-  color: var(--success);
-}
+.pipeline-step.completed .step-label  { color: var(--success); }
+.pipeline-step.completed .step-status { color: var(--success); }
 
-.pipeline-step.done .step-status {
-  color: var(--success);
-}
-
-/* Línea conectora verde cuando paso anterior está done */
-.pipeline-step.done::before {
-  background: var(--success);
-}
+/* Línea conectora verde cuando el paso ya completó */
+.pipeline-step.completed::before { background: var(--success); }
 
 
 /* ══════════════════════════════════════════════
    ESTADO: ERROR
+   polling.js: classList.add('error')
    ══════════════════════════════════════════════ */
 .pipeline-step.error .step-icon {
   background:   var(--danger-bg);
@@ -178,18 +159,59 @@
   box-shadow:   0 2px 8px rgba(214, 69, 69, 0.20);
 }
 
-.pipeline-step.error .step-label {
-  color: var(--danger);
+.pipeline-step.error .step-label  { color: var(--danger); }
+.pipeline-step.error .step-status { color: var(--danger); }
+
+.pipeline-step.error::before { background: var(--danger-line); }
+
+
+/* ══════════════════════════════════════════════
+   ESTADO: WARNING — revisión manual requerida
+   FIX: polling.js usa classList.add('warning') para
+   status === JOB_STATUS.MANUAL_REVIEW — no tenía CSS
+   ══════════════════════════════════════════════ */
+.pipeline-step.warning .step-icon {
+  background:   var(--warning-bg);
+  border-color: var(--warning);
+  color:        var(--warning-text);
+  box-shadow:   0 2px 8px rgba(180, 120, 0, 0.18);
 }
 
-.pipeline-step.error .step-status {
-  color: var(--danger);
+.pipeline-step.warning .step-label  { color: var(--warning-text); }
+.pipeline-step.warning .step-status { color: var(--warning-text); }
+
+.pipeline-step.warning::before { background: var(--warning-line); }
+
+
+/* ══════════════════════════════════════════════
+   BARRA DE PROGRESO INDETERMINADA
+   FIX: polling.js añade .indeterminate a
+   .progress-bar-fill cuando progress_percent === null
+   ══════════════════════════════════════════════ */
+@keyframes indeterminate-slide {
+  0%   { transform: translateX(-100%) scaleX(0.4); }
+  50%  { transform: translateX(50%)   scaleX(0.6); }
+  100% { transform: translateX(200%)  scaleX(0.4); }
+}
+
+.progress-bar-fill.indeterminate {
+  width:            100% !important;
+  transform-origin: left center;
+  animation:        indeterminate-slide 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-fill.indeterminate {
+    animation: none;
+    opacity:   0.5;
+  }
 }
 
 
 /* ══════════════════════════════════════════════
    BLOQUE DE ESTADO DEL JOB
-   #jobStatusBlock — padding viene de layout.css
+   #jobStatusBlock · #jobProgressBar
+   padding viene de layout.css → .job-status-block
    ══════════════════════════════════════════════ */
 .job-status-block {
   display:        flex;
@@ -214,7 +236,7 @@
   font-weight: 500;
 }
 
-/* #jobStatusValue usa .tag de components.css */
+/* #jobStatusValue usa .tag de components.css — no necesita CSS aquí */
 
 .job-progress-text {
   font-size:   var(--text-xs);
@@ -224,8 +246,6 @@
   min-height:  1em;
 }
 
-/* #jobProgressBar usa .progress-wrap de components.css */
 #jobProgressBar {
-  /* hereda .progress-wrap — solo necesita display correcto */
   display: flex;
 }
