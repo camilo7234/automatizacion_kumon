@@ -6,11 +6,11 @@
         - Actualiza el pipeline visual paso a paso
         - Muestra barra de progreso y label de estado
         - Detecta timeout global (POLL_TIMEOUT_MS)
-        - Al recibir status "done" entrega result_id
-          al módulo de resultado via callback onJobDone
-        - Al recibir status "error" muestra el mensaje
-          y detiene el loop
+        - Al recibir status "done" entrega result_id al callback onJobDone
+        - Al recibir status "error" llama onJobError y detiene el loop
+        - Al recibir status "manual_review" llama onManualReview y detiene
    ============================================================ */
+
 
 import {
   JOB_STATUS,
@@ -47,17 +47,22 @@ import {
 }                                         from './formatters.js';
 
 
+
 /* ══════════════════════════════════════════════
    ESTADO INTERNO DEL MÓDULO
    ══════════════════════════════════════════════ */
-let _onJobDone  = null;   // callback(resultId: string) → void
-let _onJobError = null;   // callback(errorMsg: string) → void
-let _jobId      = null;   // string — job activo
+let _onJobDone      = null;   // callback(resultId: string) → void
+let _onJobError     = null;   // callback(errorMsg: string) → void
+let _onManualReview = null;   // callback(resultId: string | null) → void
+let _jobId          = null;   // string — job activo
+
 
 
 /* ══════════════════════════════════════════════
    PIPELINE — mapa de pasos visuales
-   Cada paso tiene su elemento DOM cacheado
+   Fuente: PIPELINE_STEPS en config.js
+   Orden: upload(0) · queued(1) · processing(2) ·
+          done(3) · validated(4) · boletin(5)
    ══════════════════════════════════════════════ */
 const STEP_IDS = PIPELINE_STEPS.map(s => s.id);
 
@@ -69,7 +74,7 @@ function _getPipelineStepEl(stepId) {
 
 /**
  * Actualiza el estado visual de los pasos del pipeline.
- * status: estado actual del job
+ * @param {string} status — estado actual del job
  */
 function _updatePipelineSteps(status) {
   const activeIndex = _statusToStepIndex(status);
@@ -78,11 +83,17 @@ function _updatePipelineSteps(status) {
     const stepEl = _getPipelineStepEl(stepId);
     if (!stepEl) return;
 
-    stepEl.classList.remove('active', 'completed', 'error');
+    stepEl.classList.remove('active', 'completed', 'error', 'warning');
 
     if (status === JOB_STATUS.ERROR) {
-      if (index < activeIndex)  stepEl.classList.add('completed');
+      if (index < activeIndex)   stepEl.classList.add('completed');
       if (index === activeIndex) stepEl.classList.add('error');
+      return;
+    }
+
+    if (status === JOB_STATUS.MANUAL_REVIEW) {
+      if (index < activeIndex)   stepEl.classList.add('completed');
+      if (index === activeIndex) stepEl.classList.add('warning');
       return;
     }
 
@@ -93,30 +104,43 @@ function _updatePipelineSteps(status) {
 
 /**
  * Mapea job.status al índice de paso en el pipeline visual.
+ * Fuente: PIPELINE_STEPS = [upload, queued, processing, done, validated, boletin]
+ *                           idx 0    idx 1   idx 2       idx 3  idx 4      idx 5
  */
 function _statusToStepIndex(status) {
   const map = {
-    [JOB_STATUS.PENDING]:    0,   // upload
-    [JOB_STATUS.QUEUED]:     1,   // procesando (en espera)
-    [JOB_STATUS.PROCESSING]: 1,   // procesando
-    [JOB_STATUS.DONE]:       2,   // resultado
-    [JOB_STATUS.ERROR]:      1,   // error en procesamiento
+    [JOB_STATUS.PENDING]:       0,  // upload
+    [JOB_STATUS.QUEUED]:        1,  // en cola
+    [JOB_STATUS.PROCESSING]:    2,  // procesando
+    [JOB_STATUS.DONE]:          3,  // resultado listo
+    [JOB_STATUS.ERROR]:         2,  // falló durante procesamiento
+    [JOB_STATUS.MANUAL_REVIEW]: 2,  // procesamiento terminó con baja confianza
   };
   return map[status] ?? 0;
 }
 
 
+
 /* ══════════════════════════════════════════════
    BARRA DE PROGRESO DEL JOB
+   Fuente: JobStatusResponse — campo progress_percent
    ══════════════════════════════════════════════ */
 function _updateJobProgress(data) {
-  const pct    = data?.progress ?? null;
-  const status = data?.status   ?? '';
-  const label  = prettyProgressLabel(status, pct);
+  /* progress_percent es el campo real de JobStatusResponse */
+  const pct    = data?.progress_percent ?? null;
+  const status = data?.status           ?? '';
+
+  /* Texto adicional del backend — campo real: error_message
+     (usado también para mensajes de progreso como "Extrayendo frames...") */
+  const backendMsg = data?.error_message ?? null;
+  const label      = prettyProgressLabel(status, pct);
 
   /* Barra de progreso */
   if (pct !== null) {
     setProgress(el.jobProgressFill, el.jobProgressPct, pct);
+    if (el.jobProgressFill) {
+      el.jobProgressFill.classList.remove('indeterminate');
+    }
     show(el.jobProgressBar);
   } else {
     /* Sin porcentaje: animación indeterminada */
@@ -130,30 +154,28 @@ function _updateJobProgress(data) {
   /* Tag de estado */
   if (el.jobStatusValue) {
     el.jobStatusValue.textContent = prettyStatus(status);
-    el.jobStatusValue.className   =
-      `tag tag-${tagTypeForStatus(status)}`;
+    el.jobStatusValue.className   = `tag tag-${tagTypeForStatus(status)}`;
   }
 
-  /* Texto de progreso */
+  /* Texto de progreso: mensaje del backend tiene precedencia */
   if (el.jobProgressText) {
-    el.jobProgressText.textContent = label;
-  }
-
-  /* Mensaje adicional del backend (ej: "Extrayendo frames...") */
-  if (data?.message && el.jobProgressText) {
-    el.jobProgressText.textContent = data.message;
+    el.jobProgressText.textContent = backendMsg ?? label;
   }
 }
+
 
 
 /* ══════════════════════════════════════════════
    INIT
    Llamado desde app.js → init()
+   Recibe los tres callbacks del flujo.
    ══════════════════════════════════════════════ */
-export function initPolling(onJobDone, onJobError) {
-  _onJobDone  = onJobDone;
-  _onJobError = onJobError;
+export function initPolling(onJobDone, onJobError, onManualReview) {
+  _onJobDone      = onJobDone;
+  _onJobError     = onJobError;
+  _onManualReview = onManualReview;
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -181,6 +203,7 @@ export function startPolling(jobId) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    TICK — una consulta al backend
    ══════════════════════════════════════════════ */
@@ -196,10 +219,8 @@ async function _tick() {
 
   const { ok, data, error } = await getJob(_jobId);
 
-  /* Error de red */
+  /* Error de red — no detener el polling, reintentar en el próximo tick */
   if (!ok) {
-    /* No detener el polling por un error puntual de red —
-       solo mostrar un aviso temporal y reintentar */
     if (el.jobProgressText) {
       el.jobProgressText.textContent = `⚠ ${MSG.POLLING_ERROR} — reintentando...`;
     }
@@ -237,13 +258,13 @@ async function _tick() {
     return;
   }
 
-  /* ── JOB CON ERROR ── */
+  /* ── JOB CON ERROR DE PIPELINE ── */
   if (status === JOB_STATUS.ERROR) {
     _stopPolling();
 
+    /* error_message es el campo real de JobStatusResponse */
     const errorMsg =
-      data?.error   ??
-      data?.message ??
+      data?.error_message ??
       'El procesamiento falló. Intenta con otro video.';
 
     setAlert(el.resultAlert, errorMsg, 'danger');
@@ -251,9 +272,24 @@ async function _tick() {
     return;
   }
 
+  /* ── JOB CON REVISIÓN MANUAL REQUERIDA ── */
+  if (status === JOB_STATUS.MANUAL_REVIEW) {
+    _stopPolling();
+
+    /* Puede existir un result_id parcial incluso en manual_review */
+    const resultId = data?.result_id ?? null;
+    if (resultId) {
+      setResultId(resultId);
+    }
+
+    _onManualReview?.(resultId);
+    return;
+  }
+
   /* ── JOB ACTIVO — continuar polling ── */
   // El loop de setInterval seguirá llamando _tick()
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -269,6 +305,7 @@ function _stopPolling() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    RESET PÚBLICO
    Llamado desde app.js → resetAll()
@@ -280,7 +317,7 @@ export function resetPolling() {
   /* Limpiar pipeline visual */
   STEP_IDS.forEach((stepId) => {
     const stepEl = _getPipelineStepEl(stepId);
-    stepEl?.classList.remove('active', 'completed', 'error');
+    stepEl?.classList.remove('active', 'completed', 'error', 'warning');
   });
 
   /* Limpiar barra y tag */

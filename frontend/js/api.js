@@ -9,7 +9,9 @@
         el resultado sin atrapar excepciones.
    ============================================================ */
 
+
 import { ENDPOINTS } from './config.js';
+
 
 
 /* ══════════════════════════════════════════════
@@ -51,6 +53,7 @@ async function _request(url, options = {}) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    HEALTH CHECK
    GET /api/v1/health
@@ -65,26 +68,68 @@ export async function checkHealth() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    UPLOAD
    POST /api/v1/upload/video
+   Fuente: backend/app/routes/upload.py
+           backend/app/schemas/upload.py — VideoUploadForm
    ══════════════════════════════════════════════ */
 
 /**
- * Sube el video al backend.
- * @param {File}   file          — archivo seleccionado
- * @param {Object} meta          — { student_name, level, orientador }
- * @param {Function} onProgress  — callback(pct: 0–100) para la barra
- * @returns {{ ok: bool, data: { job_id, result_id? }, error }}
+ * Sube el video al backend como multipart/form-data.
+ *
+ * Campos obligatorios del backend (VideoUploadForm):
+ *   file            — UploadFile
+ *   subject         — "matematicas" | "ingles" | "espanol"
+ *   test_code       — "K1", "K2", "P1"…"P6", "M1"…"M3", "H", etc.
+ *
+ * Campos opcionales del backend:
+ *   nombre_completo — nombre del prospecto (default: "Sin nombre")
+ *   grado_escolar   — string | null
+ *   nombre_escuela  — string | null
+ *   nombre_acudiente— string | null
+ *   telefono        — string | null
+ *
+ * @param {File}     file
+ * @param {Object}   meta — {
+ *   subject:          string (requerido),
+ *   test_code:        string (requerido),
+ *   nombre_completo:  string,
+ *   grado_escolar:    string|null,
+ *   nombre_escuela:   string|null,
+ *   nombre_acudiente: string|null,
+ *   telefono:         string|null,
+ * }
+ * @param {Function} onProgress — callback(pct: 0–100) para la barra
+ * @returns {{ ok: bool, data: JobStatusResponse, error }}
+ *
+ * JobStatusResponse al crear:
+ * {
+ *   job_id:           string (UUID),
+ *   status:           "queued",
+ *   progress_percent: 0,
+ *   error_message:    null,
+ *   result_id:        null,
+ *   started_at:       null,
+ *   completed_at:     null,
+ * }
  */
 export function uploadVideo(file, meta = {}, onProgress = null) {
   return new Promise((resolve) => {
     const formData = new FormData();
     formData.append('file', file);
 
-    if (meta.student_name) formData.append('student_name', meta.student_name);
-    if (meta.level)        formData.append('level',        meta.level);
-    if (meta.orientador)   formData.append('orientador',   meta.orientador);
+    /* Campos obligatorios — el backend valida su presencia */
+    formData.append('subject',   meta.subject   ?? '');
+    formData.append('test_code', meta.test_code ?? '');
+
+    /* Campos opcionales — solo se envían si tienen valor */
+    if (meta.nombre_completo)   formData.append('nombre_completo',  meta.nombre_completo);
+    if (meta.grado_escolar)     formData.append('grado_escolar',    meta.grado_escolar);
+    if (meta.nombre_escuela)    formData.append('nombre_escuela',   meta.nombre_escuela);
+    if (meta.nombre_acudiente)  formData.append('nombre_acudiente', meta.nombre_acudiente);
+    if (meta.telefono)          formData.append('telefono',         meta.telefono);
 
     const xhr = new XMLHttpRequest();
 
@@ -138,24 +183,27 @@ export function uploadVideo(file, meta = {}, onProgress = null) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    JOBS
    GET /api/v1/jobs/{jobId}
+   Fuente: backend/app/schemas/job.py — JobStatusResponse
    ══════════════════════════════════════════════ */
 
 /**
  * Consulta el estado de un job de procesamiento.
  * @param {string} jobId
- * @returns {{ ok: bool, data: JobResponse, error }}
+ * @returns {{ ok: bool, data: JobStatusResponse, error }}
  *
- * JobResponse esperado:
+ * JobStatusResponse:
  * {
- *   job_id:    string,
- *   status:    'pending'|'queued'|'processing'|'done'|'error',
- *   progress:  number | null,   // 0–100
- *   message:   string | null,
- *   result_id: string | null,   // disponible cuando status === 'done'
- *   error:     string | null,
+ *   job_id:           string (UUID),
+ *   status:           "queued"|"processing"|"done"|"error"|"manual_review",
+ *   progress_percent: number,        // 0–100
+ *   error_message:    string | null,
+ *   result_id:        string | null, // UUID del TestResult cuando status="done"
+ *   started_at:       string | null,
+ *   completed_at:     string | null,
  * }
  */
 export async function getJob(jobId) {
@@ -163,30 +211,45 @@ export async function getJob(jobId) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    RESULTS
    GET /api/v1/results/job/{jobId}
+   Fuente: backend/app/schemas/result.py — TestResultResponse
    ══════════════════════════════════════════════ */
 
 /**
  * Obtiene el resultado completo del análisis de video.
  * @param {string} jobId
- * @returns {{ ok: bool, data: ResultResponse, error }}
+ * @returns {{ ok: bool, data: TestResultResponse, error }}
  *
- * ResultResponse esperado:
+ * TestResultResponse:
  * {
- *   id:                  string,
- *   ws:                  string,
- *   study_time_min:      number,
- *   target_time_min:     number,
- *   correct_answers:     number,
- *   total_questions:     number,
- *   percentage:          number,
- *   semaforo:            'verde'|'amarillo'|'rojo',
- *   starting_point:      string,
- *   recommendation:      string,
- *   confidence_score:    number,   // 0.0 – 1.0
+ *   id_result:           string (UUID),
+ *   id_job:              string (UUID),
+ *   tipo_sujeto:         string,
+ *   nombre_sujeto:       string,
+ *   subject:             string,
+ *   test_code:           string,
+ *   display_name:        string,
+ *   test_date:           string | null,
+ *   ws:                  string | null,
+ *   study_time_min:      string | null, // Decimal serializado
+ *   target_time_min:     string | null,
+ *   correct_answers:     number | null,
+ *   total_questions:     number | null,
+ *   percentage:          string | null, // Decimal serializado
+ *   current_level:       string | null,
+ *   starting_point:      string | null,
+ *   semaforo:            "verde"|"amarillo"|"rojo"|null,
+ *   recommendation:      string | null,
+ *   confidence_score:    string | null, // Decimal 0.0–1.0
  *   needs_manual_review: boolean,
+ *   sections_detail:     object,
+ *   raw_ocr_data:        object,
+ *   tiene_observacion:   boolean,
+ *   observacion_completa:boolean,
+ *   created_at:          string,
  * }
  */
 export async function getResult(jobId) {
@@ -194,10 +257,12 @@ export async function getResult(jobId) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    CUESTIONARIO
    GET  /api/v1/cuestionario/{resultId}
    POST /api/v1/cuestionario/{resultId}
+   Fuente: backend/app/schemas/cuestionario.py
    ══════════════════════════════════════════════ */
 
 /**
@@ -205,48 +270,45 @@ export async function getResult(jobId) {
  * @param {string} resultId
  * @returns {{ ok: bool, data: CuestionarioResponse, error }}
  *
- * CuestionarioResponse esperado:
+ * CuestionarioResponse:
  * {
- *   result_id:    string,
- *   questions:    Question[],
+ *   result_id:     string (UUID),
+ *   subject:       string,
+ *   test_code:     string,
+ *   cuestionario:  object,   // estructura declarativa con secciones y preguntas
  *   ya_completado: boolean,
- *   completado_at: string | null,
- *   completado_por: string | null,
+ *   tiene_prefills:boolean,
+ *   prefill_flags: string[], // claves capturadas automáticamente por el sistema
  * }
  */
 export async function getCuestionario(resultId) {
   return _request(ENDPOINTS.getCuestionario(resultId));
 }
 
+
 /**
  * Envía las respuestas del cuestionario al backend.
- * El backend genera el boletín y retorna BoletinResponse.
- * @param {string} resultId
- * @param {Object} payload — { respuestas: {}, completado_por, observacion_libre }
- * @returns {{ ok: bool, data: BoletinResponse, error }}
+ * Guarda la ObservacionCualitativa y habilita el boletín.
+ * El boletín en sí se obtiene con getBoletin(resultId).
  *
- * BoletinResponse esperado:
+ * @param {string} resultId
+ * @param {Object} payload — {
+ *   respuestas:              object,  // { clave: valor } o { seccion: { clave: valor } }
+ *   completado_por:          string,  // nombre del orientador (mínimo 2 caracteres, requerido)
+ *   observacion_libre:       string|null,
+ *   correcciones_orientador: object,  // {} por defecto
+ * }
+ * @returns {{ ok: bool, data: CuestionarioSubmitResponse, error }}
+ *
+ * CuestionarioSubmitResponse:
  * {
- *   result_id:           string,
- *   student_name:        string,
- *   level:               string,
- *   ws:                  string,
- *   semaforo:            string,
- *   percentage:          number,
- *   puntaje_cualitativo: number,
- *   etiqueta_cualitativa:string,
- *   detalle_secciones:   Section[],
- *   study_time_min:      number,
- *   target_time_min:     number,
- *   correct_answers:     number,
- *   total_questions:     number,
- *   starting_point:      string,
- *   recommendation:      string,
- *   confidence_score:    number,
- *   needs_manual_review: boolean,
- *   observacion_libre:   string | null,
- *   status:              string,
- *   generated_at:        string,
+ *   observacion_id:    string | null (UUID),
+ *   result_id:         string (UUID),
+ *   total_porcentaje:  number,   // 0–100
+ *   etiqueta_total:    string,   // "fortaleza"|"en_desarrollo"|"refuerzo"|"atencion"
+ *   secciones:         SeccionPuntaje[],
+ *   boletin_habilitado:boolean,
+ *   message:           string,
  * }
  */
 export async function submitCuestionario(resultId, payload) {
@@ -258,51 +320,96 @@ export async function submitCuestionario(resultId, payload) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    BOLETÍN
    GET   /api/v1/boletin/{resultId}
    PATCH /api/v1/boletin/{resultId}
+   Fuente: backend/app/schemas/cuestionario.py — BoletinResponse / BoletinPatchRequest
    ══════════════════════════════════════════════ */
 
 /**
- * Carga el boletín generado.
+ * Obtiene el boletín consolidado.
+ * Solo disponible cuando el cuestionario cualitativo está completo.
+ * Si el boletín no existe lo genera; si ya existe lo sirve desde BD.
+ *
  * @param {string} resultId
  * @returns {{ ok: bool, data: BoletinResponse, error }}
+ *
+ * BoletinResponse:
+ * {
+ *   boletin_id:   string | null (UUID),
+ *   result_id:    string (UUID),
+ *   subject:      string,
+ *   test_code:    string,
+ *   status:       "ready" | "pending" | "corregido_por_orientador",
+ *   generated_at: string | null,
+ *   cuantitativo: object,
+ *   cualitativo:  object,
+ *   combinado:    object,
+ *   gaze:         object | null,
+ *   message:      string,
+ * }
  */
 export async function getBoletin(resultId) {
   return _request(ENDPOINTS.getBoletin(resultId));
 }
 
+
 /**
  * Aplica correcciones del orientador al boletín.
- * Corresponde al BLOQUE 3 del plan de migración.
+ * Fuente: BoletinPatchRequest
+ *
  * @param {string} resultId
- * @param {Object} corrections — campos corregidos, p.ej.:
- *   {
- *     ws:               "5A",
- *     correct_answers:  19,
- *     observacion_libre:"Estudiante muy concentrado.",
- *   }
- * @returns {{ ok: bool, data: BoletinResponse, error }}
+ * @param {Object} payload — {
+ *   correcciones: [
+ *     {
+ *       campo:          string,  // ruta dot-notation, ej: "cuantitativo.recommendation"
+ *       valor_original: any,     // valor previo (para auditoría)
+ *       valor_nuevo:    any,     // valor corregido
+ *       motivo:         string|null,
+ *     }
+ *   ],
+ *   corregido_por: string,       // nombre del orientador (mínimo 2 caracteres)
+ * }
+ * @returns {{ ok: bool, data: BoletinPatchResponse, error }}
+ *
+ * BoletinPatchResponse:
+ * {
+ *   boletin_id:             string (UUID),
+ *   result_id:              string (UUID),
+ *   subject:                string,
+ *   test_code:              string,
+ *   status:                 string,
+ *   generated_at:           string | null,
+ *   cuantitativo:           object,
+ *   cualitativo:            object,
+ *   combinado:              object,
+ *   gaze:                   object | null,
+ *   correcciones_aplicadas: number,
+ *   message:                string,
+ * }
  */
-export async function patchBoletin(resultId, corrections) {
+export async function patchBoletin(resultId, payload) {
   return _request(ENDPOINTS.patchBoletin(resultId), {
     method:  'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify(corrections),
+    body:    JSON.stringify(payload),
   });
 }
 
+
 /**
  * Descarga el PDF del boletín usando un anchor programático.
- * Abre el endpoint en una nueva pestaña para aprovechar
- * el StreamingResponse del backend.
+ * Aprovecha el StreamingResponse del backend directamente.
+ * Requiere que el cuestionario cualitativo esté completo.
+ *
  * @param {string} resultId
- * @param {string} studentName — para el nombre del archivo
+ * @param {string} nombreSujeto — para el nombre sugerido del archivo
  */
-export function downloadBoletinPdf(resultId, studentName = 'boletin') {
+export function downloadBoletinPdf(resultId, nombreSujeto = 'boletin') {
   const url      = ENDPOINTS.getBoletinPdf(resultId);
-  const filename = `boletin_${studentName.replace(/\s+/g, '_')}.pdf`;
+  const filename = `boletin_${nombreSujeto.replace(/\s+/g, '_')}.pdf`;
   const a        = document.createElement('a');
   a.href         = url;
   a.download     = filename;

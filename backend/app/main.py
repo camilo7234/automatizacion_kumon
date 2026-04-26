@@ -118,10 +118,13 @@ app = FastAPI(
 # MIDDLEWARE — ORDEN IMPORTANTE (se aplican de abajo hacia arriba)
 # ================================================================
 
-# 1. TrustedHostMiddleware: rechaza peticiones con Host header
-#    desconocido (protege contra Host header injection).
-#    En producción reemplaza "*" con tu dominio real.
-_trusted_hosts: list[str] = ["localhost", "127.0.0.1", "*"]
+# ── ORDEN DE MIDDLEWARE (se aplican de abajo hacia arriba) ──────
+
+# 1. TrustedHostMiddleware
+_trusted_hosts_env = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1")
+_trusted_hosts: list[str] = [
+    h.strip() for h in _trusted_hosts_env.split(",") if h.strip()
+]
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
 
 # 2. CORS
@@ -132,38 +135,19 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
     expose_headers=["X-Request-ID"],
-    max_age=600,  # Cache preflight 10 minutos
+    max_age=600,
 )
 
-
-# ================================================================
-# MIDDLEWARE — SECURITY HEADERS
-#
-# ★ CORRECCIÓN FASE 1:
-#   Cabeceras HTTP de seguridad que el frontend NO puede inyectar.
-#   Se aplican a TODAS las respuestas, incluyendo errores.
-#   No reemplazan un proxy reverso (nginx/Caddy), pero protegen
-#   cuando el servidor FastAPI está expuesto directamente.
-# ================================================================
+# 3. Security headers
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next) -> Response:
     response: Response = await call_next(request)
-    # Impide que el navegador adivine el Content-Type (MIME sniffing).
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    # Bloquea renderizado del sitio en iframes (clickjacking).
-    response.headers["X-Frame-Options"] = "DENY"
-    # Solo envía el origin en el Referer, nunca la URL completa.
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    # Deshabilita características del navegador no necesarias.
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    # HSTS: fuerza HTTPS en producción.
-    # Activa solo cuando tengas TLS configurado; en dev no hace daño
-    # porque el navegador solo aplica HSTS sobre HTTPS real.
-    response.headers["Strict-Transport-Security"] = (
-        "max-age=31536000; includeSubDomains"
-    )
+    response.headers["X-Content-Type-Options"]  = "nosniff"
+    response.headers["X-Frame-Options"]         = "DENY"
+    response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"]       = "geolocation=(), microphone=(), camera=()"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
-
 
 # ================================================================
 # ROUTERS

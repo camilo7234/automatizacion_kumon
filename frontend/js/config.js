@@ -7,12 +7,14 @@
         una URL o constante — solo importa desde aquí.
    ============================================================ */
 
+
 /* ══════════════════════════════════════════════
    BASE URL DEL BACKEND
    Cambia solo aquí para apuntar a producción,
    staging o local sin tocar ningún otro archivo.
    ══════════════════════════════════════════════ */
 export const API_BASE = 'http://localhost:8000';
+
 
 
 /* ══════════════════════════════════════════════
@@ -45,6 +47,7 @@ export const ENDPOINTS = {
 };
 
 
+
 /* ══════════════════════════════════════════════
    POLLING
    ══════════════════════════════════════════════ */
@@ -56,23 +59,28 @@ export const POLL_INTERVAL_MS = 4000;
 export const POLL_TIMEOUT_MS  = 600_000; // 10 minutos
 
 
+
 /* ══════════════════════════════════════════════
    ESTADOS DEL JOB
-   Deben coincidir exactamente con los valores
-   que retorna el backend en job.status
+   Fuente: backend/app/schemas/job.py
+   JobStatusResponse.status: "queued | processing | done | error | manual_review"
+   Nota: 'pending' no está documentado en el backend actual pero se conserva
+         por compatibilidad con posibles respuestas en tránsito.
    ══════════════════════════════════════════════ */
 export const JOB_STATUS = {
-  PENDING:    'pending',
-  QUEUED:     'queued',
-  PROCESSING: 'processing',
-  DONE:       'done',
-  ERROR:      'error',
+  PENDING:       'pending',       // legacy — no documentado en schema actual
+  QUEUED:        'queued',
+  PROCESSING:    'processing',
+  DONE:          'done',
+  ERROR:         'error',
+  MANUAL_REVIEW: 'manual_review', // pipeline terminó, requiere revisión manual
 };
 
-/** Estados que indican que el job terminó (éxito o error) */
+/** Estados que indican que el job terminó (éxito, error o revisión) */
 export const JOB_TERMINAL_STATES = new Set([
   JOB_STATUS.DONE,
   JOB_STATUS.ERROR,
+  JOB_STATUS.MANUAL_REVIEW,
 ]);
 
 /** Estados que indican que el job sigue activo */
@@ -83,15 +91,20 @@ export const JOB_ACTIVE_STATES = new Set([
 ]);
 
 
+
 /* ══════════════════════════════════════════════
    ESTADOS DEL BOLETÍN
-   Deben coincidir con Bulletin.status del backend
+   Fuente: backend/app/routes/cuestionario.py
+   bulletin.status se asigna como "ready" tras generación.
+   El estado "corregido_por_orientador" corresponde al PATCH
+   (pendiente de implementar en backend).
    ══════════════════════════════════════════════ */
 export const BOLETIN_STATUS = {
-  PENDING:    'pending',
-  GENERATED:  'generated',
-  CORREGIDO:  'corregido_por_orientador',
+  PENDING:   'pending',
+  READY:     'ready',                    // valor real que retorna el backend
+  CORREGIDO: 'corregido_por_orientador',
 };
+
 
 
 /* ══════════════════════════════════════════════
@@ -117,6 +130,7 @@ export const SEMAFORO_LABEL = {
 };
 
 
+
 /* ══════════════════════════════════════════════
    TIPOS DE PREGUNTA DEL CUESTIONARIO
    Deben coincidir con question.type del backend
@@ -130,6 +144,7 @@ export const QUESTION_TYPE = {
 };
 
 
+
 /* ══════════════════════════════════════════════
    UMBRALES DE CONFIANZA OCR
    Usados para colorear el dot de confidence_score
@@ -141,8 +156,10 @@ export const CONFIDENCE = {
 };
 
 
+
 /* ══════════════════════════════════════════════
    UPLOAD
+   Fuente: backend/app/schemas/upload.py y settings
    ══════════════════════════════════════════════ */
 
 /** Tamaño máximo de archivo permitido (bytes) — 500 MB */
@@ -160,18 +177,22 @@ export const ACCEPTED_VIDEO_TYPES = [
 export const ACCEPTED_VIDEO_LABEL = 'MP4, MOV, AVI, WEBM';
 
 
+
 /* ══════════════════════════════════════════════
    PIPELINE — pasos visuales
    Orden y labels de los pasos del proceso.
-   id debe coincidir con los estados del job.
+   El paso 'queued' refleja el estado real del backend
+   entre la subida y el inicio del procesamiento.
    ══════════════════════════════════════════════ */
 export const PIPELINE_STEPS = [
   { id: 'upload',     label: 'Subida',       icon: '📤' },
+  { id: 'queued',     label: 'En cola',      icon: '⏳' },
   { id: 'processing', label: 'Procesando',   icon: '⚙️'  },
   { id: 'done',       label: 'Resultado',    icon: '📊' },
   { id: 'validated',  label: 'Validación',   icon: '✅' },
   { id: 'boletin',    label: 'Boletín',      icon: '📋' },
 ];
+
 
 
 /* ══════════════════════════════════════════════
@@ -182,7 +203,7 @@ export const PIPELINE_STEPS = [
 export const MSG = {
   // Upload
   UPLOAD_REQUIRED:       'Selecciona un archivo de video antes de continuar.',
-  UPLOAD_SIZE_EXCEEDED:  `El archivo supera el límite de 500 MB.`,
+  UPLOAD_SIZE_EXCEEDED:  'El archivo supera el límite de 500 MB.',
   UPLOAD_TYPE_INVALID:   `Formato no soportado. Usa ${ACCEPTED_VIDEO_LABEL}.`,
   UPLOAD_LOADING:        'Subiendo video al servidor...',
   UPLOAD_SUCCESS:        'Video subido correctamente. Procesando...',
@@ -191,6 +212,7 @@ export const MSG = {
   // Polling
   POLLING_TIMEOUT:       'El procesamiento tardó demasiado. Verifica el servidor.',
   POLLING_ERROR:         'Error consultando el estado del job.',
+  POLLING_MANUAL_REVIEW: 'El sistema requiere revisión manual del resultado.',
 
   // Resultado
   RESULT_LOADING:        'Cargando resultado del análisis...',
@@ -198,8 +220,8 @@ export const MSG = {
 
   // Cuestionario
   CUESTIONARIO_LOADING:  'Cargando formulario de validación...',
-  CUESTIONARIO_EMPTY:    'Completa al menos una respuesta antes de continuar.',
-  CUESTIONARIO_SUCCESS:  'Boletín generado correctamente.',
+  CUESTIONARIO_EMPTY:    'Completa las respuestas e ingresa el nombre del orientador antes de continuar.',
+  CUESTIONARIO_SUCCESS:  'Validación cualitativa guardada. Ya puedes generar el boletín.',
   CUESTIONARIO_ERROR:    'No fue posible guardar la validación.',
 
   // Boletín

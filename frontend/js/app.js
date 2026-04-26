@@ -12,18 +12,28 @@
         NO contiene lógica de negocio — solo orquesta.
    ============================================================ */
 
+
 /* ── Módulos propios ── */
-import { initEl, el, updateBackendDot, show, hide } from './ui.js';
-import { resetState }                               from './state.js';
-import { checkHealth }                              from './api.js';
-import { initUpload,      resetUpload }             from './upload.js';
-import { initPolling,     startPolling,  resetPolling }   from './polling.js';
-import { initResultado,   loadResultado, resetResultado } from './resultado.js';
-import { initCuestionario,loadCuestionario,resetCuestionario } from './cuestionario.js';
-import { initBoletin,     renderBoletin, loadBoletin, resetBoletin } from './boletin.js';
+import {
+  initEl, el,
+  updateBackendDot,
+  show, hide,
+  setAlert,
+}                                                           from './ui.js';
+import { resetState, getResultId }                         from './state.js';
+import { checkHealth }                                     from './api.js';
+import { initUpload,       resetUpload }                   from './upload.js';
+import { initPolling,      startPolling,   resetPolling }  from './polling.js';
+import { initResultado,    loadResultado,  resetResultado } from './resultado.js';
+import { initCuestionario, loadCuestionario, resetCuestionario } from './cuestionario.js';
+import { initBoletin,      loadBoletin,    resetBoletin }  from './boletin.js';
+
+import { MSG }                                             from './config.js';
+
 
 /* ── Constantes ── */
 const HEALTH_CHECK_INTERVAL_MS = 30_000;   // cada 30 s
+
 
 
 /* ══════════════════════════════════════════════
@@ -39,13 +49,14 @@ function init() {
   initUpload(_onUploadDone);
 
   initPolling(
-    _onJobDone,    // job terminó con éxito → result_id
-    _onJobError    // job terminó con error
+    _onJobDone,       // job terminó con éxito → result_id disponible
+    _onJobError,      // job terminó con error del pipeline o timeout
+    _onManualReview   // job terminó con status "manual_review" — OCR requiere revisión
   );
 
   initResultado(_onResultReady);
 
-  initCuestionario(_onBoletinReady);
+  initCuestionario(_onCuestionarioDone);
 
   initBoletin();   // los botones se bindean internamente
 
@@ -58,8 +69,9 @@ function init() {
 }
 
 
+
 /* ══════════════════════════════════════════════
-   FLUJO — 5 callbacks encadenados
+   FLUJO — callbacks encadenados
    Cada uno es llamado por el módulo anterior
    cuando su tarea termina con éxito.
    ══════════════════════════════════════════════ */
@@ -74,6 +86,7 @@ function _onUploadDone(jobId) {
   startPolling(jobId);
 }
 
+
 /**
  * PASO 2 → 3
  * polling.js llama este callback cuando
@@ -84,17 +97,39 @@ function _onJobDone(resultId) {
   loadResultado(resultId);
 }
 
+
 /**
- * PASO 2 (error)
+ * PASO 2 (error de pipeline o timeout de polling)
  * polling.js llama este callback cuando
  * job.status === "error" o se agotó el timeout.
- * Muestra la sección de resultado con el error
- * para que el orientador vea el mensaje.
+ * Muestra la sección de resultado con el mensaje
+ * de error para que el orientador vea qué pasó.
  */
 function _onJobError(errorMsg) {
   show(el.resultSection);
+  setAlert(el.resultAlert, errorMsg ?? MSG.POLLING_ERROR, 'danger');
   console.error('[app] Job error:', errorMsg);
 }
+
+
+/**
+ * PASO 2 (revisión manual requerida)
+ * polling.js llama este callback cuando
+ * job.status === "manual_review".
+ * El OCR no alcanzó el umbral de confianza —
+ * el orientador debe revisar el resultado manualmente.
+ * Se muestra la sección de resultado para que pueda
+ * continuar el flujo con revisión visual.
+ */
+function _onManualReview(resultId) {
+  show(el.resultSection);
+  setAlert(el.resultAlert, MSG.POLLING_MANUAL_REVIEW, 'warning');
+  /* Intentar cargar el resultado parcial si existe */
+  if (resultId) {
+    loadResultado(resultId);
+  }
+}
+
 
 /**
  * PASO 3 → 4
@@ -106,16 +141,26 @@ function _onResultReady() {
   loadCuestionario();
 }
 
+
 /**
  * PASO 4 → 5
  * cuestionario.js llama este callback cuando
- * el POST /cuestionario retornó el BoletinResponse.
- * Renderiza el boletín directamente con esos datos
- * sin hacer otro GET — el dato ya está en memoria.
+ * POST /cuestionario terminó con éxito
+ * (CuestionarioSubmitResponse.boletin_habilitado === true).
+ *
+ * NO se pasan los datos del submit — esos son CuestionarioSubmitResponse,
+ * no BoletinResponse. Se dispara loadBoletin() para obtener el
+ * BoletinResponse completo (cuantitativo + cualitativo + combinado).
  */
-function _onBoletinReady(boletinData) {
-  renderBoletin(boletinData);
+function _onCuestionarioDone() {
+  const resultId = getResultId();
+  if (!resultId) {
+    console.error('[app] _onCuestionarioDone: resultId no disponible en estado.');
+    return;
+  }
+  loadBoletin(resultId);
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -125,17 +170,18 @@ function _onBoletinReady(boletinData) {
    ══════════════════════════════════════════════ */
 async function _runHealthCheck() {
   updateBackendDot('pending');
-
   const { ok } = await checkHealth();
-
   updateBackendDot(ok ? 'ok' : 'error');
 }
+
 
 
 /* ══════════════════════════════════════════════
    RESET ALL — "Nueva sesión"
    Limpia TODO el estado y la UI para procesar
    un nuevo video sin recargar la página.
+   app.js garantiza el estado visual inicial
+   independientemente de lo que hagan los módulos.
    ══════════════════════════════════════════════ */
 function resetAll() {
   /* Estado global */
@@ -148,12 +194,17 @@ function resetAll() {
   resetCuestionario();
   resetBoletin();
 
-  /* Volver a mostrar solo la sección de upload */
+  /* Garantizar visibilidad inicial desde el orquestador */
   show(el.uploadSection);
+  hide(el.pipelineSection);
+  hide(el.resultSection);
+  hide(el.cuestionarioSection);
+  hide(el.boletinSection);
 
   /* Health check inmediato tras reset */
   _runHealthCheck();
 }
+
 
 
 /* ══════════════════════════════════════════════

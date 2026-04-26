@@ -8,10 +8,11 @@
         - Dot de confianza OCR
         - Grid de métricas cuantitativas
         - Secciones cualitativas con etiquetas
-        - Caja de observación libre del orientador
+        - Caja de observación cualitativa del orientador
         - Panel de correcciones (PATCH /boletin/{id})
         - Botón descarga PDF
    ============================================================ */
+
 
 import { MSG, BOLETIN_STATUS }            from './config.js';
 import {
@@ -48,6 +49,21 @@ import {
 }                                         from './formatters.js';
 
 
+
+/* ══════════════════════════════════════════════
+   UTILIDAD — normalizar Decimal serializado
+   BoletinResponse serializa campos Decimal como
+   strings desde el backend (ej: "85.50").
+   Llamar antes de cualquier formateo numérico.
+   ══════════════════════════════════════════════ */
+function _toFloat(value) {
+  if (value === null || value === undefined) return null;
+  const n = parseFloat(value);
+  return isNaN(n) ? null : n;
+}
+
+
+
 /* ══════════════════════════════════════════════
    INIT
    ══════════════════════════════════════════════ */
@@ -56,10 +72,11 @@ export function initBoletin() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    RENDER DESDE DATOS YA CARGADOS
-   Llamado desde cuestionario.js vía app.js
-   → onBoletinReady(boletinData)
+   Llamado desde loadBoletin() — recibe
+   BoletinResponse completo del GET /boletin/{id}
    ══════════════════════════════════════════════ */
 export function renderBoletin(data) {
   if (!data) return;
@@ -81,10 +98,12 @@ export function renderBoletin(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    LOAD DESDE BACKEND
-   Para cuando la página recarga y el boletín
-   ya existe — carga directamente sin cuestionario
+   Llamado desde app.js → _onCuestionarioDone
+   vía loadBoletin(resultId).
+   También usado para recargar tras correcciones.
    ══════════════════════════════════════════════ */
 export async function loadBoletin(resultId) {
   show(el.boletinSection);
@@ -96,11 +115,7 @@ export async function loadBoletin(resultId) {
   const { ok, data, error } = await getBoletin(resultId);
 
   if (!ok || !data) {
-    setAlert(
-      el.boletinAlert,
-      error ?? MSG.BOLETIN_ERROR,
-      'danger'
-    );
+    setAlert(el.boletinAlert, error ?? MSG.BOLETIN_ERROR, 'danger');
     return;
   }
 
@@ -109,36 +124,39 @@ export async function loadBoletin(resultId) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    BARRA DE ESTADO
    ══════════════════════════════════════════════ */
 function _renderStatusBar(data) {
   if (!el.boletinStatusBar) return;
 
-  const status    = data.status ?? BOLETIN_STATUS.GENERATED;
-  const cssClass  = boletinStatusClass(status);
-  const label     = boletinStatusLabel(status);
-  const dateStr   = formatDate(data.generated_at);
+  const status   = data.status ?? BOLETIN_STATUS.GENERATED;
+  const cssClass = boletinStatusClass(status);
+  const label    = boletinStatusLabel(status);
+  const dateStr  = formatDate(data.generated_at);
 
-  el.boletinStatusBar.className   = `boletin-status-bar ${cssClass}`;
-  el.boletinStatusBar.innerHTML   = `
+  el.boletinStatusBar.className = `boletin-status-bar ${cssClass}`;
+  el.boletinStatusBar.innerHTML = `
     <span class="status-label">${label}</span>
     <span class="status-date">${dateStr}</span>
   `;
 }
 
 
+
 /* ══════════════════════════════════════════════
    HERO — puntaje combinado + semáforo
+   Campos Decimal (puntaje_combinado, percentage)
+   llegan como strings — normalizar con _toFloat.
    ══════════════════════════════════════════════ */
 function _renderHero(data) {
-  /* Puntaje combinado */
   if (el.boletinHeroScore) {
-    const score = data.puntaje_combinado ?? data.percentage ?? null;
+    /* puntaje_combinado es el score final; fallback a percentage */
+    const score = _toFloat(data.puntaje_combinado ?? data.percentage);
     el.boletinHeroScore.textContent = formatPercent(score, 1);
   }
 
-  /* Semáforo */
   const value = data.semaforo ?? '';
   const tone  = toneForSemaforo(value);
 
@@ -152,11 +170,13 @@ function _renderHero(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    DOT DE CONFIANZA OCR
+   confidence_score llega como string Decimal.
    ══════════════════════════════════════════════ */
 function _renderConfidenceDot(data) {
-  const score    = data.confidence_score ?? null;
+  const score    = _toFloat(data.confidence_score);
   const dotClass = confidenceDotClass(score);
   const label    = confidenceLabel(score);
 
@@ -187,8 +207,10 @@ function _renderConfidenceDot(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    MÉTRICAS CUANTITATIVAS
+   Campos Decimal normalizados con _toFloat.
    ══════════════════════════════════════════════ */
 function _renderMetrics(data) {
   if (!el.boletinMetricsGrid) return;
@@ -206,7 +228,7 @@ function _renderMetrics(data) {
     },
     {
       label: 'Porcentaje',
-      value: formatPercent(data.percentage),
+      value: formatPercent(_toFloat(data.percentage)),
       icon:  '📊',
     },
     {
@@ -216,12 +238,12 @@ function _renderMetrics(data) {
     },
     {
       label: 'Tiempo estudio',
-      value: formatMinutes(data.study_time_min),
+      value: formatMinutes(_toFloat(data.study_time_min)),
       icon:  '⏱',
     },
     {
       label: 'Tiempo objetivo',
-      value: formatMinutes(data.target_time_min),
+      value: formatMinutes(_toFloat(data.target_time_min)),
       icon:  '🎯',
     },
   ];
@@ -236,9 +258,12 @@ function _renderMetrics(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    SECCIONES CUALITATIVAS
    detalle_secciones: [{ nombre, puntaje, etiqueta }]
+   puntaje por sección y puntaje_cualitativo global
+   son Decimal — normalizar con _toFloat.
    ══════════════════════════════════════════════ */
 function _renderSections(data) {
   if (!el.boletinSections) return;
@@ -252,7 +277,7 @@ function _renderSections(data) {
       <div class="section-row section-summary">
         <span class="section-nombre">Evaluación global</span>
         <span class="section-puntaje">
-          ${formatPercent(data.puntaje_cualitativo)}
+          ${formatPercent(_toFloat(data.puntaje_cualitativo))}
         </span>
         <span class="tag tag-${type}">${label}</span>
       </div>
@@ -268,7 +293,7 @@ function _renderSections(data) {
           ${_escapeHtml(sec.nombre ?? '—')}
         </span>
         <span class="section-puntaje">
-          ${formatPercent(sec.puntaje)}
+          ${formatPercent(_toFloat(sec.puntaje))}
         </span>
         <span class="tag tag-${type}">${label}</span>
       </div>
@@ -277,13 +302,16 @@ function _renderSections(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
-   OBSERVACIÓN LIBRE DEL ORIENTADOR
+   OBSERVACIÓN CUALITATIVA DEL ORIENTADOR
+   Campo real de BoletinResponse: observacion_cualitativa
    ══════════════════════════════════════════════ */
 function _renderObservacion(data) {
   if (!el.boletinObservacion) return;
 
-  const text = data.observacion_libre ?? null;
+  /* observacion_cualitativa es el campo real de BoletinResponse */
+  const text = data.observacion_cualitativa ?? null;
 
   if (!text) {
     hide(el.boletinObservacion);
@@ -298,16 +326,18 @@ function _renderObservacion(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    PANEL DE CORRECCIONES
-   Permite al orientador corregir valores
-   cuantitativos antes o después de generar el PDF.
+   Permite corregir valores cuantitativos y la
+   observación antes o después de generar el PDF.
    Usa PATCH /api/v1/boletin/{resultId}
+   Campo observación: observacion_cualitativa
+   (alineado con BoletinPatchRequest)
    ══════════════════════════════════════════════ */
 function _renderCorrectionPanel(data) {
   if (!el.correctionGrid) return;
 
-  /* Campos corregibles: los cuantitativos clave */
   const fields = [
     {
       key:         'ws',
@@ -336,15 +366,16 @@ function _renderCorrectionPanel(data) {
       key:         'study_time_min',
       label:       'Tiempo estudio (min)',
       type:        'number',
-      value:       data.study_time_min ?? '',
+      value:       _toFloat(data.study_time_min) ?? '',
       placeholder: 'Ej: 45',
       min:         0,
     },
     {
-      key:         'observacion_libre',
+      /* observacion_cualitativa — alineado con BoletinPatchRequest */
+      key:         'observacion_cualitativa',
       label:       'Observación del orientador',
       type:        'textarea',
-      value:       data.observacion_libre ?? '',
+      value:       data.observacion_cualitativa ?? '',
       placeholder: 'Escribe una observación adicional...',
     },
   ];
@@ -379,6 +410,7 @@ function _renderCorrectionPanel(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    GUARDAR CORRECCIONES — submit del panel
    ══════════════════════════════════════════════ */
@@ -389,30 +421,32 @@ async function _handleSaveCorrections() {
     return;
   }
 
-  /* Recolectar solo los campos que cambiaron */
-  const inputs = el.correctionGrid
+  const inputs  = el.correctionGrid
     ?.querySelectorAll('.correction-input') ?? [];
+  const current = getBoletinData() ?? {};
 
   const corrections = {};
-  const current     = getBoletinData() ?? {};
+  const numericKeys = [
+    'correct_answers', 'total_questions',
+    'study_time_min',  'target_time_min',
+  ];
 
   inputs.forEach(inp => {
     const key      = inp.dataset.key;
-    const rawValue = inp.tagName === 'TEXTAREA'
-      ? inp.value.trim()
-      : inp.value.trim();
+    const rawValue = inp.value.trim();
 
-    /* Convertir a número si el campo original era numérico */
-    const numericKeys = [
-      'correct_answers', 'total_questions',
-      'study_time_min',  'target_time_min',
-    ];
     const value = numericKeys.includes(key) && rawValue !== ''
       ? Number(rawValue)
       : rawValue || null;
 
+    /* Para comparación normalizar el valor actual también
+       (puede ser string Decimal del backend) */
+    const currentNorm = numericKeys.includes(key)
+      ? _toFloat(current[key])
+      : (current[key] ?? null);
+
     /* Solo incluir en el payload si el valor cambió */
-    if (String(value) !== String(current[key] ?? '')) {
+    if (String(value ?? '') !== String(currentNorm ?? '')) {
       corrections[key] = value;
     }
   });
@@ -422,7 +456,6 @@ async function _handleSaveCorrections() {
     return;
   }
 
-  /* Deshabilitar botón durante el request */
   if (el.saveCorrectionBtn) {
     el.saveCorrectionBtn.disabled    = true;
     el.saveCorrectionBtn.textContent = 'Guardando...';
@@ -444,10 +477,10 @@ async function _handleSaveCorrections() {
     return;
   }
 
-  /* Re-renderizar el boletín con los datos corregidos */
   setAlert(el.boletinAlert, MSG.BOLETIN_PATCH_SUCCESS, 'success');
   renderBoletin(data);
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -468,18 +501,20 @@ function _bindButtons() {
   /* Guardar correcciones */
   el.saveCorrectionBtn?.addEventListener('click', _handleSaveCorrections);
 
-  /* Descargar PDF */
+  /* Descargar PDF — nombre del archivo desde nombre_sujeto */
   el.downloadPdfBtn?.addEventListener('click', () => {
     const resultId = resolveResultId();
     if (!resultId) {
       setAlert(el.boletinAlert, MSG.BOLETIN_PDF_ERROR, 'danger');
       return;
     }
-    const boletin  = getBoletinData();
-    const name     = boletin?.student_name ?? 'estudiante';
+    const boletin = getBoletinData();
+    /* nombre_sujeto es el campo real de BoletinResponse */
+    const name    = boletin?.nombre_sujeto?.trim() || 'estudiante';
     downloadBoletinPdf(resultId, name);
   });
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -509,6 +544,7 @@ export function resetBoletin() {
   hide(el.boletinSection);
   setBoletinActionsEnabled(false);
 }
+
 
 
 /* ══════════════════════════════════════════════

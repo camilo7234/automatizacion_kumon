@@ -9,7 +9,9 @@
         directamente — solo importa desde aquí.
    ============================================================ */
 
+
 import { MSG } from './config.js';
+
 
 /* ══════════════════════════════════════════════
    REFERENCIAS DOM — objeto el.*
@@ -20,12 +22,13 @@ export const el = {
 
   /* ── BACKEND STATUS (header) ── */
   backendDot:           null,  // .backend-status-dot
-  backendLabel:         null,  // .backend-status span de texto
+  backendLabel:         null,  // .backend-status-text
+
 
   /* ── SECCIÓN UPLOAD ── */
   uploadSection:        null,  // #uploadSection
   uploadForm:           null,  // #uploadForm
-  uploadInput:          null,  // #uploadInput  (input type=file)
+  uploadInput:          null,  // #uploadInput           (input type=file)
   uploadDropZone:       null,  // #uploadDropZone
   uploadDropFilename:   null,  // #uploadDropFilename
   uploadProgressWrap:   null,  // #uploadProgressWrap
@@ -34,19 +37,22 @@ export const el = {
   uploadAlert:          null,  // #uploadAlert
   uploadBtn:            null,  // #uploadBtn
   resetBtn:             null,  // #resetBtn
-  studentNameInput:     null,  // #studentNameInput
-  levelInput:           null,  // #levelInput
-  orientadorInput:      null,  // #orientadorInput
+  /* Campos del formulario — alineados con VideoUploadForm del backend */
+  subjectInput:         null,  // #subjectInput          → form field: subject
+  testCodeInput:        null,  // #testCodeInput         → form field: test_code
+  nombreCompletoInput:  null,  // #nombreCompletoInput   → form field: nombre_completo
+
 
   /* ── PIPELINE ── */
   pipelineSection:      null,  // #pipelineSection
   pipelineSteps:        null,  // NodeList de .pipeline-step (se llena en initEl)
   jobStatusBlock:       null,  // #jobStatusBlock
   jobStatusValue:       null,  // #jobStatusValue
-  jobProgressBar:       null,  // #jobProgressBar
+  jobProgressBar:       null,  // #jobProgressBar        (contenedor — toggle visibilidad)
   jobProgressFill:      null,  // #jobProgressFill
   jobProgressPct:       null,  // #jobProgressPct
   jobProgressText:      null,  // #jobProgressText
+
 
   /* ── RESULTADO ── */
   resultSection:        null,  // #resultSection
@@ -65,6 +71,7 @@ export const el = {
   recommendationBox:    null,  // #recommendationBox
   validationNotice:     null,  // #validationNotice
 
+
   /* ── CUESTIONARIO ── */
   cuestionarioSection:  null,  // #cuestionarioSection
   cuestionarioAlert:    null,  // #cuestionarioAlert
@@ -73,7 +80,8 @@ export const el = {
   cuestionarioStatusTag:null,  // #cuestionarioStatusTag
   cuestionarioStudent:  null,  // #cuestionarioStudent
   saveCuestionarioBtn:  null,  // #saveCuestionarioBtn
-  completadoPorInput:   null,  // #completadoPorInput
+  completadoPorInput:   null,  // #completadoPorInput    → payload.completado_por
+
 
   /* ── BOLETÍN ── */
   boletinSection:       null,  // #boletinSection
@@ -88,12 +96,13 @@ export const el = {
   boletinObservacion:   null,  // #boletinObservacion
   boletinConfidenceDot: null,  // #boletinConfidenceDot
   boletinConfidencePct: null,  // #boletinConfidencePct
-  openBoletinBtn:       null,  // #openBoletinBtn   (abrir visor inline)
+  openBoletinBtn:       null,  // #openBoletinBtn        (abrir visor inline)
   downloadPdfBtn:       null,  // #downloadPdfBtn
   correctionPanel:      null,  // #correctionPanel
   correctionGrid:       null,  // #correctionGrid
   saveCorrectionBtn:    null,  // #saveCorrectionBtn
 };
+
 
 
 /* ══════════════════════════════════════════════
@@ -121,9 +130,10 @@ export function initEl() {
   el.uploadAlert          = get('uploadAlert');
   el.uploadBtn            = get('uploadBtn');
   el.resetBtn             = get('resetBtn');
-  el.studentNameInput     = get('studentNameInput');
-  el.levelInput           = get('levelInput');
-  el.orientadorInput      = get('orientadorInput');
+  /* Campos del formulario — IDs alineados con VideoUploadForm del backend */
+  el.subjectInput         = get('subjectInput');
+  el.testCodeInput        = get('testCodeInput');
+  el.nombreCompletoInput  = get('nombreCompletoInput');
 
   /* Pipeline */
   el.pipelineSection      = get('pipelineSection');
@@ -183,6 +193,7 @@ export function initEl() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    setAlert — muestra un mensaje de alerta
    target : elemento DOM del alert
@@ -191,16 +202,17 @@ export function initEl() {
    ══════════════════════════════════════════════ */
 export function setAlert(target, message, type = 'info') {
   if (!target) return;
-  target.className      = `alert alert-${type}`;
-  target.textContent    = message;
-  target.style.display  = message ? 'flex' : 'none';
+  target.className     = `alert alert-${type}`;
+  target.textContent   = message;
+  target.style.display = message ? 'flex' : 'none';
 }
 
 export function clearAlert(target) {
   if (!target) return;
-  target.style.display  = 'none';
-  target.textContent    = '';
+  target.style.display = 'none';
+  target.textContent   = '';
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -216,20 +228,24 @@ export function setTag(target, text, type = 'default') {
 }
 
 
+
 /* ══════════════════════════════════════════════
    SHOW / HIDE — manejo de visibilidad
+   Parámetro renombrado a `node` para no shadowear
+   el objeto exportado `el` del mismo módulo.
    ══════════════════════════════════════════════ */
-export function show(el)  { if (el) el.classList.remove('hidden'); }
-export function hide(el)  { if (el) el.classList.add('hidden'); }
-export function toggle(el, visible) {
-  if (!el) return;
-  visible ? show(el) : hide(el);
+export function show(node)  { if (node) node.classList.remove('hidden'); }
+export function hide(node)  { if (node) node.classList.add('hidden'); }
+export function toggle(node, visible) {
+  if (!node) return;
+  visible ? show(node) : hide(node);
 }
+
 
 
 /* ══════════════════════════════════════════════
    BACKEND STATUS DOT
-   Actualiza el indicador de conexión en el header
+   Actualiza el indicador de conexión en el header.
    state: 'ok' | 'error' | 'pending'
    ══════════════════════════════════════════════ */
 export function updateBackendDot(state) {
@@ -249,18 +265,26 @@ export function updateBackendDot(state) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    UPLOAD LOADING STATE
    Muestra/oculta el estado de carga del upload
-   y bloquea el botón durante la subida
+   y bloquea el botón durante la subida.
+   Resetea la barra a 0% al iniciar para que no
+   muestre el valor residual de un upload anterior.
    ══════════════════════════════════════════════ */
 export function setLoadingUpload(loading) {
   if (el.uploadBtn) {
     el.uploadBtn.disabled    = loading;
     el.uploadBtn.textContent = loading ? 'Subiendo...' : 'Procesar video';
   }
+  if (loading) {
+    /* Resetear barra antes de mostrarla */
+    setProgress(el.uploadProgressFill, el.uploadProgressPct, 0);
+  }
   toggle(el.uploadProgressWrap, loading);
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -271,15 +295,16 @@ export function setLoadingUpload(loading) {
    ══════════════════════════════════════════════ */
 export function setProgress(fill, pctEl, value) {
   const pct = Math.min(100, Math.max(0, value));
-  if (fill)  fill.style.width      = `${pct}%`;
-  if (pctEl) pctEl.textContent     = `${Math.round(pct)}%`;
+  if (fill)  fill.style.width  = `${pct}%`;
+  if (pctEl) pctEl.textContent = `${Math.round(pct)}%`;
 }
+
 
 
 /* ══════════════════════════════════════════════
    BOTONES DEL BOLETÍN
    Habilita/deshabilita los botones de acción
-   según si el boletín ya existe
+   según si el boletín ya existe.
    ══════════════════════════════════════════════ */
 export function setBoletinActionsEnabled(enabled) {
   if (el.openBoletinBtn)  el.openBoletinBtn.disabled  = !enabled;
@@ -287,13 +312,16 @@ export function setBoletinActionsEnabled(enabled) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    CUESTIONARIO SUBMIT BUTTON
+   El POST /cuestionario guarda la observación;
+   el boletín se genera en GET /boletin posterior.
    ══════════════════════════════════════════════ */
 export function setCuestionarioSubmitting(submitting) {
   if (!el.saveCuestionarioBtn) return;
   el.saveCuestionarioBtn.disabled    = submitting;
   el.saveCuestionarioBtn.textContent = submitting
-    ? 'Generando boletín...'
-    : 'Generar boletín';
+    ? 'Guardando validación...'
+    : 'Guardar validación';
 }

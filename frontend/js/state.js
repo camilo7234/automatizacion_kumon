@@ -10,7 +10,9 @@
         sea rastreable y predecible.
    ============================================================ */
 
-import { JOB_STATUS } from './config.js';
+
+import { JOB_TERMINAL_STATES } from './config.js';
+
 
 /* ══════════════════════════════════════════════
    ESTADO INTERNO
@@ -19,43 +21,47 @@ import { JOB_STATUS } from './config.js';
 const _state = {
 
   /* ── JOB ACTIVO ── */
-  currentJobId:    null,   // string | null — ID del job en BD
+  currentJobId:    null,   // string | null — UUID del job en BD
   pollingTimer:    null,   // setInterval ref
   pollingStart:    null,   // Date — para calcular timeout
 
   /* ── RESULTADO DEL VIDEO ── */
-  currentResultId: null,   // string | null — ID de TestResult en BD
-  lastJobData:     null,   // objeto completo de GET /jobs/{id}
-  lastResultData:  null,   // objeto completo de GET /results/job/{jobId}
+  currentResultId: null,   // string | null — UUID de TestResult en BD
+  lastJobData:     null,   // objeto completo de GET /jobs/{job_id}   → JobStatusResponse
+  lastResultData:  null,   // objeto completo de GET /results/job/{jobId} → TestResultResponse
 
   /* ── CUESTIONARIO ── */
-  lastCuestionarioData: null,  // objeto de GET /cuestionario/{resultId}
-  cuestionarioLoaded:   false, // true cuando el orientador completó y se generó boletín
+  lastCuestionarioData: null,  // objeto de GET /cuestionario/{resultId} → CuestionarioResponse
+  cuestionarioLoaded:   false, // true cuando el orientador completó el cuestionario (POST exitoso)
 
   /* ── BOLETÍN ── */
-  lastBoletinData: null,   // objeto de GET /boletin/{resultId}
+  lastBoletinData: null,   // objeto de GET /boletin/{resultId} → BoletinResponse
 
   /* ── UI FLAGS ── */
   isUploading:     false,  // true mientras el video viaja al backend
+  uploadProgress:  0,      // número 0–100 — progreso del upload (XHR onProgress)
   isPolling:       false,  // true mientras el polling está activo
 };
+
 
 
 /* ══════════════════════════════════════════════
    GETTERS
    ══════════════════════════════════════════════ */
 
-export const getJobId        = ()  => _state.currentJobId;
-export const getResultId     = ()  => _state.currentResultId;
-export const getPollingTimer  = ()  => _state.pollingTimer;
-export const getPollingStart  = ()  => _state.pollingStart;
-export const getJobData       = ()  => _state.lastJobData;
-export const getResultData    = ()  => _state.lastResultData;
-export const getCuestionario  = ()  => _state.lastCuestionarioData;
-export const isCuestionarioDone = () => _state.cuestionarioLoaded;
-export const getBoletinData   = ()  => _state.lastBoletinData;
-export const isUploading      = ()  => _state.isUploading;
-export const isPolling        = ()  => _state.isPolling;
+export const getJobId             = () => _state.currentJobId;
+export const getResultId          = () => _state.currentResultId;
+export const getPollingTimer      = () => _state.pollingTimer;
+export const getPollingStart      = () => _state.pollingStart;
+export const getJobData           = () => _state.lastJobData;
+export const getResultData        = () => _state.lastResultData;
+export const getCuestionario      = () => _state.lastCuestionarioData;
+export const isCuestionarioDone   = () => _state.cuestionarioLoaded;
+export const getBoletinData       = () => _state.lastBoletinData;
+export const isUploading          = () => _state.isUploading;
+export const getUploadProgress    = () => _state.uploadProgress;
+export const isPolling            = () => _state.isPolling;
+
 
 
 /* ══════════════════════════════════════════════
@@ -82,9 +88,15 @@ export function setJobData(data) {
   _state.lastJobData = data;
 }
 
+/**
+ * Guarda el TestResultResponse completo.
+ * Fuente: backend/app/schemas/result.py — TestResultResponse
+ * El campo identificador real es id_result (UUID).
+ */
 export function setResultData(data) {
-  _state.lastResultData    = data;
-  _state.currentResultId   = data?.id ?? _state.currentResultId;
+  _state.lastResultData  = data;
+  /* id_result es el campo real de TestResultResponse */
+  _state.currentResultId = data?.id_result ?? _state.currentResultId;
 }
 
 export function setCuestionario(data) {
@@ -103,9 +115,14 @@ export function setUploading(val) {
   _state.isUploading = Boolean(val);
 }
 
+export function setUploadProgress(pct) {
+  _state.uploadProgress = Number(pct) || 0;
+}
+
 export function setPollingActive(val) {
   _state.isPolling = Boolean(val);
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -113,14 +130,17 @@ export function setPollingActive(val) {
    Calculados a partir del estado — no almacenados
    ══════════════════════════════════════════════ */
 
-/** true si hay un job activo y aún no terminó */
+/**
+ * true si hay un job activo y aún no terminó.
+ * Usa JOB_TERMINAL_STATES para incluir todos los estados
+ * terminales: done, error, manual_review.
+ */
 export function jobIsRunning() {
   const status = _state.lastJobData?.status;
   return Boolean(
     _state.currentJobId &&
     status &&
-    status !== JOB_STATUS.DONE &&
-    status !== JOB_STATUS.ERROR
+    !JOB_TERMINAL_STATES.has(status)
   );
 }
 
@@ -134,11 +154,16 @@ export function hasBoletin() {
   return Boolean(_state.lastBoletinData);
 }
 
-/** Retorna el resultId del estado o del último resultado cargado */
+/**
+ * Retorna el resultId disponible.
+ * Fuente: campo id_result de TestResultResponse.
+ */
 export function resolveResultId() {
-  return _state.currentResultId
-    ?? _state.lastResultData?.id
-    ?? null;
+  return (
+    _state.currentResultId ??
+    _state.lastResultData?.id_result ??
+    null
+  );
 }
 
 /** Cuántos ms lleva el polling activo */
@@ -146,6 +171,7 @@ export function pollingElapsedMs() {
   if (!_state.pollingStart) return 0;
   return Date.now() - _state.pollingStart.getTime();
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -170,8 +196,10 @@ export function resetState() {
   _state.cuestionarioLoaded    = false;
   _state.lastBoletinData       = null;
   _state.isUploading           = false;
+  _state.uploadProgress        = 0;
   _state.isPolling             = false;
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -181,13 +209,14 @@ export function resetState() {
 export function debugState() {
   if (import.meta?.env?.MODE === 'production') return;
   console.table({
-    jobId:              _state.currentJobId,
-    resultId:           _state.currentResultId,
-    jobStatus:          _state.lastJobData?.status ?? '—',
-    hasResult:          hasResult(),
-    cuestionarioDone:   _state.cuestionarioLoaded,
-    hasBoletin:         hasBoletin(),
-    isPolling:          _state.isPolling,
-    pollingElapsedSec:  Math.round(pollingElapsedMs() / 1000),
+    jobId:             _state.currentJobId,
+    resultId:          _state.currentResultId,
+    jobStatus:         _state.lastJobData?.status ?? '—',
+    uploadProgress:    _state.uploadProgress,
+    hasResult:         hasResult(),
+    cuestionarioDone:  _state.cuestionarioLoaded,
+    hasBoletin:        hasBoletin(),
+    isPolling:         _state.isPolling,
+    pollingElapsedSec: Math.round(pollingElapsedMs() / 1000),
   });
 }

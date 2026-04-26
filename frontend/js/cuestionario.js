@@ -8,11 +8,12 @@
         - Renderiza cada pregunta según su type
           (radio, select, textarea, number, checkbox)
         - Si ya_completado === true muestra el form
-          en modo lectura con las respuestas guardadas
+          en modo lectura y dispara el boletín si está habilitado
         - POST /cuestionario/{resultId} → envía respuestas
-        - Al recibir BoletinResponse notifica a app.js
-          via onBoletinReady(boletinData)
+        - Al completar notifica a app.js via onCuestionarioDone()
+          (sin argumentos — app.js carga el boletín directamente)
    ============================================================ */
+
 
 import {
   QUESTION_TYPE,
@@ -24,7 +25,6 @@ import {
   resolveResultId,
   setCuestionario,
   setCuestionarioDone,
-  setBoletinData,
 }                                         from './state.js';
 import {
   el,
@@ -38,20 +38,23 @@ import {
 import { formatDate, titleCase }          from './formatters.js';
 
 
+
 /* ══════════════════════════════════════════════
    ESTADO INTERNO
    ══════════════════════════════════════════════ */
-let _onBoletinReady = null;  // callback(boletinData) → void
-let _questions      = [];    // Question[] cacheadas para el submit
-let _yaCompletado   = false; // true → modo lectura
+let _onCuestionarioDone = null;  // callback() → void  (notifica a app.js)
+let _questions          = [];    // Question[] cacheadas para el submit
+let _yaCompletado       = false; // true → modo lectura
+
 
 
 /* ══════════════════════════════════════════════
    INIT
    ══════════════════════════════════════════════ */
-export function initCuestionario(onBoletinReady) {
-  _onBoletinReady = onBoletinReady;
+export function initCuestionario(onCuestionarioDone) {
+  _onCuestionarioDone = onCuestionarioDone;
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -72,49 +75,67 @@ export async function loadCuestionario() {
   const { ok, data, error } = await getCuestionario(resultId);
 
   if (!ok || !data) {
-    setAlert(el.cuestionarioAlert, error ?? MSG.CUESTIONARIO_LOADING, 'danger');
+    setAlert(
+      el.cuestionarioAlert,
+      error ?? MSG.CUESTIONARIO_LOADING,
+      'danger'
+    );
     return;
   }
 
   setCuestionario(data);
   clearAlert(el.cuestionarioAlert);
 
-  _questions     = data.questions  ?? [];
-  _yaCompletado  = Boolean(data.ya_completado);
+  _questions    = data.questions  ?? [];
+  _yaCompletado = Boolean(data.ya_completado);
 
   /* Header del cuestionario */
   _renderHeader(data);
 
   /* Preguntas */
-  _renderQuestions(_questions, _yaCompletado, data.respuestas_guardadas ?? {});
+  _renderQuestions(
+    _questions,
+    _yaCompletado,
+    data.respuestas_guardadas ?? {}
+  );
 
   /* Footer — campo completado_por + botón submit */
   _renderFooter(data);
 
-  /* Si ya estaba completado, cargar directamente el boletín */
+  /* Si ya estaba completado y el boletín está habilitado,
+     disparar directamente sin esperar submit */
   if (_yaCompletado) {
     setCuestionarioDone(true);
-    show(el.cuestionarioSection);
+    if (data.boletin_habilitado) {
+      _onCuestionarioDone?.();
+    }
   }
 }
 
 
+
 /* ══════════════════════════════════════════════
-   HEADER — nombre del estudiante + tag de estado
+   HEADER — nombre del sujeto + tag de estado
+   Fuente: CuestionarioResponse.nombre_sujeto
    ══════════════════════════════════════════════ */
 function _renderHeader(data) {
-  /* Nombre */
+  /* nombre_sujeto es el campo real de CuestionarioResponse */
   if (el.cuestionarioStudent) {
     el.cuestionarioStudent.textContent =
-      data.student_name ?? data.result_id ?? '—';
+      data.nombre_sujeto?.trim() || data.result_id || '—';
   }
 
   /* Tag de estado */
   if (el.cuestionarioStatusTag) {
     if (_yaCompletado) {
       setTag(el.cuestionarioStatusTag, '✅ Completado', 'success');
-      const completadoAt  = formatDate(data.completado_at);
+
+      /* completado_at puede ser null si el flag es true pero la fecha no llegó */
+      const completadoAt  = data.completado_at
+        ? formatDate(data.completado_at)
+        : 'fecha desconocida';
       const completadoPor = data.completado_por ?? 'Orientador';
+
       el.cuestionarioStatusTag.setAttribute(
         'title',
         `Completado por ${completadoPor} el ${completadoAt}`
@@ -124,6 +145,7 @@ function _renderHeader(data) {
     }
   }
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -145,15 +167,16 @@ function _renderQuestions(questions, readOnly, savedAnswers) {
 }
 
 function _buildQuestionBlock(q, readOnly, savedAnswers) {
-  const saved = savedAnswers[q.id] ?? null;
-
+  const saved     = savedAnswers[q.id] ?? null;
   const inputHtml = _buildInput(q, readOnly, saved);
 
   return `
     <div class="question-block" data-question-id="${q.id}">
       <label class="question-label" for="q_${q.id}">
         ${_escapeHtml(q.label ?? q.text ?? `Pregunta ${q.id}`)}
-        ${q.required ? '<span class="required-star" aria-hidden="true">*</span>' : ''}
+        ${q.required
+          ? '<span class="required-star" aria-hidden="true">*</span>'
+          : ''}
       </label>
       ${q.description
         ? `<p class="question-description">${_escapeHtml(q.description)}</p>`
@@ -164,6 +187,7 @@ function _buildQuestionBlock(q, readOnly, savedAnswers) {
     </div>
   `;
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -180,8 +204,8 @@ function _buildInput(q, readOnly, saved) {
     case QUESTION_TYPE.RADIO: {
       const options = q.options ?? [];
       return options.map(opt => {
-        const checked  = saved === opt.value ? 'checked' : '';
-        const optId    = `${id}_${opt.value}`;
+        const checked = saved === opt.value ? 'checked' : '';
+        const optId   = `${id}_${opt.value}`;
         return `
           <label class="radio-option ${readOnly && checked ? 'selected' : ''}">
             <input type="radio"
@@ -213,8 +237,8 @@ function _buildInput(q, readOnly, saved) {
 
     /* ── TEXTAREA ── */
     case QUESTION_TYPE.TEXTAREA: {
-      const rows  = q.rows ?? 3;
-      const text  = saved ? _escapeHtml(String(saved)) : '';
+      const rows = q.rows ?? 3;
+      const text = saved ? _escapeHtml(String(saved)) : '';
       return `
         <textarea id="${id}"
                   name="${name}"
@@ -271,8 +295,12 @@ function _buildInput(q, readOnly, saved) {
 }
 
 
+
 /* ══════════════════════════════════════════════
-   FOOTER — completado_por + observacion_libre + submit
+   FOOTER — completado_por + observacion_cualitativa + submit
+   Textos de botón alineados con setCuestionarioSubmitting en ui.js:
+     activo   → 'Guardar validación'
+     disabled → '✅ Ya guardado'
    ══════════════════════════════════════════════ */
 function _renderFooter(data) {
   /* completado_por: si ya está completo, rellenar con el valor guardado */
@@ -281,15 +309,15 @@ function _renderFooter(data) {
     el.completadoPorInput.disabled = _yaCompletado;
   }
 
-  /* Botón submit */
+  /* Botón submit — texto alineado con setCuestionarioSubmitting */
   if (el.saveCuestionarioBtn) {
-    el.saveCuestionarioBtn.disabled = _yaCompletado;
+    el.saveCuestionarioBtn.disabled    = _yaCompletado;
     el.saveCuestionarioBtn.textContent = _yaCompletado
-      ? '✅ Ya generado'
-      : 'Generar boletín';
+      ? '✅ Ya guardado'
+      : 'Guardar validación';
   }
 
-  /* Bind del evento submit (solo si no estaba ya completado) */
+  /* Bind del evento submit solo si no estaba ya completado */
   if (!_yaCompletado) {
     el.cuestionarioForm?.removeEventListener('submit', _handleSubmit);
     el.cuestionarioForm?.addEventListener('submit', _handleSubmit);
@@ -297,10 +325,9 @@ function _renderFooter(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    RECOLECCIÓN DE RESPUESTAS
-   Recorre el DOM del formulario y extrae
-   los valores según el tipo de cada pregunta
    ══════════════════════════════════════════════ */
 function _collectAnswers() {
   const respuestas = {};
@@ -357,6 +384,7 @@ function _collectAnswers() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    SUBMIT
    ══════════════════════════════════════════════ */
@@ -370,10 +398,10 @@ async function _handleSubmit(e) {
     return;
   }
 
-  const respuestas      = _collectAnswers();
-  const completado_por  = el.completadoPorInput?.value?.trim() || null;
+  const respuestas     = _collectAnswers();
+  const completado_por = el.completadoPorInput?.value?.trim() || null;
 
-  /* Validar que al menos una respuesta no sea null */
+  /* Validar que al menos una respuesta no sea vacía */
   const hasAnswer = Object.values(respuestas).some(v =>
     v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
   );
@@ -383,12 +411,13 @@ async function _handleSubmit(e) {
     return;
   }
 
-  /* Construir payload */
+  /* Construir payload alineado con CuestionarioSubmitRequest:
+     { respuestas, completado_por, observacion_cualitativa }
+     observacion_cualitativa: textarea libre con id="observacion_cualitativa" */
   const payload = {
     respuestas,
     completado_por,
-    /* observacion_libre — si el orientador escribió en un textarea libre */
-    observacion_libre: _getObservacionLibre(),
+    observacion_cualitativa: _getObservacionCualitativa(),
   };
 
   setCuestionarioSubmitting(true);
@@ -402,33 +431,35 @@ async function _handleSubmit(e) {
     return;
   }
 
-  /* Guardar boletín en estado global */
-  setBoletinData(data);
   setCuestionarioDone(true);
 
-  /* Actualizar UI del cuestionario a modo "completado" */
+  /* Actualizar UI a modo "completado" */
   setTag(el.cuestionarioStatusTag, '✅ Completado', 'success');
   if (el.saveCuestionarioBtn) {
     el.saveCuestionarioBtn.disabled    = true;
-    el.saveCuestionarioBtn.textContent = '✅ Ya generado';
+    el.saveCuestionarioBtn.textContent = '✅ Ya guardado';
   }
 
   setAlert(el.cuestionarioAlert, MSG.CUESTIONARIO_SUCCESS, 'success');
 
-  /* Notificar a app.js para mostrar el boletín */
-  _onBoletinReady?.(data);
+  /* Notificar a app.js — sin argumentos.
+     app.js llama loadBoletin(resultId) internamente. */
+  _onCuestionarioDone?.();
 }
+
 
 
 /* ══════════════════════════════════════════════
-   OBSERVACIÓN LIBRE
-   Busca un textarea con id="observacion_libre"
-   que puede existir fuera del formulario dinámico
+   OBSERVACIÓN CUALITATIVA LIBRE
+   Textarea opcional fuera del formulario dinámico.
+   id="observacion_cualitativa" alineado con
+   CuestionarioSubmitRequest.observacion_cualitativa
    ══════════════════════════════════════════════ */
-function _getObservacionLibre() {
-  const ta = document.getElementById('observacion_libre');
+function _getObservacionCualitativa() {
+  const ta = document.getElementById('observacion_cualitativa');
   return ta?.value?.trim() || null;
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -438,12 +469,13 @@ export function resetCuestionario() {
   _questions    = [];
   _yaCompletado = false;
 
-  if (el.cuestionarioBody)     el.cuestionarioBody.innerHTML    = '';
-  if (el.cuestionarioStudent)  el.cuestionarioStudent.textContent = '';
-  if (el.completadoPorInput)   el.completadoPorInput.value       = '';
+  if (el.cuestionarioBody)    el.cuestionarioBody.innerHTML      = '';
+  if (el.cuestionarioStudent) el.cuestionarioStudent.textContent = '';
+  if (el.completadoPorInput)  el.completadoPorInput.value        = '';
+
   if (el.saveCuestionarioBtn) {
     el.saveCuestionarioBtn.disabled    = false;
-    el.saveCuestionarioBtn.textContent = 'Generar boletín';
+    el.saveCuestionarioBtn.textContent = 'Guardar validación';
   }
 
   clearAlert(el.cuestionarioAlert);
@@ -451,6 +483,7 @@ export function resetCuestionario() {
 
   el.cuestionarioForm?.removeEventListener('submit', _handleSubmit);
 }
+
 
 
 /* ══════════════════════════════════════════════

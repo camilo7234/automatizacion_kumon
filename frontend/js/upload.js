@@ -4,11 +4,12 @@
    Depende de: config.js · api.js · state.js · ui.js
    Rol: Maneja toda la interacción del área de upload:
         - Drag & drop + click para seleccionar archivo
-        - Validación de tipo y tamaño antes de enviar
+        - Validación de tipo, tamaño y campos obligatorios
         - Barra de progreso real via XHR onProgress
         - Entrega job_id al módulo de polling al terminar
         - Callback onUploadDone(jobId) inyectado desde app.js
    ============================================================ */
+
 
 import {
   MAX_FILE_SIZE_BYTES,
@@ -17,8 +18,8 @@ import {
   MSG,
 } from './config.js';
 
-import { uploadVideo }                    from './api.js';
-import { setUploading, setJobId }         from './state.js';
+import { uploadVideo }                          from './api.js';
+import { setUploading, setJobId, setUploadProgress } from './state.js';
 import {
   el,
   setAlert,
@@ -27,14 +28,16 @@ import {
   setProgress,
   show,
   hide,
-}                                         from './ui.js';
+}                                               from './ui.js';
+
 
 
 /* ══════════════════════════════════════════════
    ESTADO INTERNO DEL MÓDULO
    ══════════════════════════════════════════════ */
-let _selectedFile  = null;   // File | null
-let _onUploadDone  = null;   // callback(jobId: string) → void
+let _selectedFile = null;   // File | null
+let _onUploadDone = null;   // callback(jobId: string) → void
+
 
 
 /* ══════════════════════════════════════════════
@@ -49,6 +52,7 @@ export function initUpload(onUploadDone) {
   _bindFileInput();
   _bindForm();
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -106,6 +110,7 @@ function _onDrop(e) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    FILE INPUT — input[type=file]
    ══════════════════════════════════════════════ */
@@ -117,6 +122,7 @@ function _bindFileInput() {
     }
   });
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -138,11 +144,7 @@ function _handleFileSelection(file) {
 
   /* Validar tamaño */
   if (file.size > MAX_FILE_SIZE_BYTES) {
-    setAlert(
-      el.uploadAlert,
-      MSG.UPLOAD_SIZE_EXCEEDED,
-      'danger'
-    );
+    setAlert(el.uploadAlert, MSG.UPLOAD_SIZE_EXCEEDED, 'danger');
     _clearSelection();
     return;
   }
@@ -154,7 +156,7 @@ function _handleFileSelection(file) {
 
 function _clearSelection() {
   _selectedFile = null;
-  if (el.uploadInput) el.uploadInput.value = '';
+  if (el.uploadInput)        el.uploadInput.value        = '';
   if (el.uploadDropFilename) el.uploadDropFilename.textContent = '';
 }
 
@@ -172,6 +174,7 @@ function _formatFileSize(bytes) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    FORMULARIO — submit
    ══════════════════════════════════════════════ */
@@ -185,23 +188,38 @@ function _bindForm() {
 async function _handleSubmit() {
   clearAlert(el.uploadAlert);
 
-  /* Validar que haya archivo */
+  /* Validar que haya archivo seleccionado */
   if (!_selectedFile) {
     setAlert(el.uploadAlert, MSG.UPLOAD_REQUIRED, 'warning');
     return;
   }
 
-  /* Leer metadata del formulario */
+  /* Leer campos del formulario — alineados con VideoUploadForm del backend */
+  const subject        = el.subjectInput?.value?.trim()        || '';
+  const testCode       = el.testCodeInput?.value?.trim()       || '';
+  const nombreCompleto = el.nombreCompletoInput?.value?.trim() || '';
+
+  /* Validar campos obligatorios del backend */
+  if (!subject) {
+    setAlert(el.uploadAlert, 'Selecciona la materia antes de continuar.', 'warning');
+    return;
+  }
+  if (!testCode) {
+    setAlert(el.uploadAlert, 'Ingresa el código de prueba antes de continuar.', 'warning');
+    return;
+  }
+
   const meta = {
-    student_name: el.studentNameInput?.value?.trim() || null,
-    level:        el.levelInput?.value?.trim()        || null,
-    orientador:   el.orientadorInput?.value?.trim()   || null,
+    subject,
+    test_code:       testCode,
+    nombre_completo: nombreCompleto || null,
+    /* grado_escolar, nombre_escuela, nombre_acudiente, telefono
+       no se solicitan en la UI inicial — se envían solo si existen */
   };
 
   /* UI: modo loading */
   setUploading(true);
   setLoadingUpload(true);
-  setProgress(el.uploadProgressFill, el.uploadProgressPct, 0);
   setAlert(el.uploadAlert, MSG.UPLOAD_LOADING, 'info');
 
   /* Subir con progreso */
@@ -209,7 +227,9 @@ async function _handleSubmit() {
     _selectedFile,
     meta,
     (pct) => {
+      /* Actualizar UI y estado global de progreso */
       setProgress(el.uploadProgressFill, el.uploadProgressPct, pct);
+      setUploadProgress(pct);
     }
   );
 
@@ -235,6 +255,7 @@ async function _handleSubmit() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    RESET PÚBLICO
    Llamado desde app.js → resetAll()
@@ -243,14 +264,16 @@ async function _handleSubmit() {
 export function resetUpload() {
   _selectedFile = null;
 
-  if (el.uploadInput)        el.uploadInput.value       = '';
-  if (el.uploadDropFilename) el.uploadDropFilename.textContent = '';
-  if (el.studentNameInput)   el.studentNameInput.value  = '';
-  if (el.levelInput)         el.levelInput.value        = '';
-  if (el.orientadorInput)    el.orientadorInput.value   = '';
+  if (el.uploadInput)          el.uploadInput.value              = '';
+  if (el.uploadDropFilename)   el.uploadDropFilename.textContent  = '';
+  /* Campos del formulario — IDs alineados con VideoUploadForm del backend */
+  if (el.subjectInput)         el.subjectInput.value              = '';
+  if (el.testCodeInput)        el.testCodeInput.value             = '';
+  if (el.nombreCompletoInput)  el.nombreCompletoInput.value       = '';
 
   clearAlert(el.uploadAlert);
   setLoadingUpload(false);
   setProgress(el.uploadProgressFill, el.uploadProgressPct, 0);
+  setUploadProgress(0);
   hide(el.uploadProgressWrap);
 }

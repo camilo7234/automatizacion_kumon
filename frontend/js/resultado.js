@@ -3,16 +3,17 @@
    Archivo: frontend/js/resultado.js
    Depende de: api.js · state.js · ui.js · formatters.js
    Rol: Carga y renderiza el TestResult completo:
-        - Hero con nombre del estudiante, nivel y dot OCR
+        - Hero con nombre del sujeto, nivel y dot OCR
         - Banner de revisión manual si needs_manual_review
         - Bloque semáforo con icono y label
         - Grid de KPIs cuantitativos
         - Tabla de detalles expandida
         - Caja de recomendación
-        - Aviso de validación pendiente
+        - Aviso de validación pendiente (si no está completo)
         Al terminar de renderizar notifica a app.js
         via onResultReady() para mostrar el cuestionario.
    ============================================================ */
+
 
 import { MSG }                            from './config.js';
 import { getResult }                      from './api.js';
@@ -38,10 +39,12 @@ import {
 }                                         from './formatters.js';
 
 
+
 /* ══════════════════════════════════════════════
    ESTADO INTERNO
    ══════════════════════════════════════════════ */
 let _onResultReady = null;   // callback() → void
+
 
 
 /* ══════════════════════════════════════════════
@@ -52,9 +55,11 @@ export function initResultado(onResultReady) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    LOAD & RENDER
    Llamado desde polling.js vía app.js → onJobDone
+   @param {string} jobId — UUID del job completado
    ══════════════════════════════════════════════ */
 export async function loadResultado(jobId) {
   show(el.resultSection);
@@ -69,7 +74,8 @@ export async function loadResultado(jobId) {
     return;
   }
 
-  /* Guardar en estado global */
+  /* Guardar en estado global
+     setResultData extrae id_result y lo persiste como currentResultId */
   setResultData(data);
   clearAlert(el.resultAlert);
 
@@ -80,7 +86,7 @@ export async function loadResultado(jobId) {
   _renderKpis(data);
   _renderDetails(data);
   _renderRecommendation(data);
-  _renderValidationNotice();
+  _renderValidationNotice(data);
 
   show(el.resultBlock);
 
@@ -89,24 +95,31 @@ export async function loadResultado(jobId) {
 }
 
 
+
 /* ══════════════════════════════════════════════
-   HERO — estudiante, nivel, dot de confianza
+   HERO — sujeto, nivel, dot de confianza
+   Fuente: TestResultResponse
+     nombre_sujeto  — nombre del prospecto o estudiante
+     ws             — código de la hoja de trabajo (ej: "5A")
+     confidence_score — Decimal serializado como string "0.00–1.00"
    ══════════════════════════════════════════════ */
 function _renderHero(data) {
-  /* Nombre del estudiante */
+  /* nombre_sujeto es el campo real de TestResultResponse */
   if (el.resultHeroStudent) {
     el.resultHeroStudent.textContent =
-      data.student_name ?? 'Estudiante';
+      data.nombre_sujeto?.trim() || 'Sin nombre';
   }
 
-  /* Nivel / WS */
+  /* ws: código de la hoja de trabajo */
   if (el.resultHeroLevel) {
     el.resultHeroLevel.textContent =
-      data.ws ? `Nivel ${data.ws}` : '—';
+      data.ws ? `WS ${data.ws}` : '—';
   }
 
-  /* Dot de confianza OCR */
-  const score = data.confidence_score ?? null;
+  /* confidence_score llega como string Decimal — convertir a float */
+  const score = data.confidence_score !== null && data.confidence_score !== undefined
+    ? parseFloat(data.confidence_score)
+    : null;
   const dotClass = confidenceDotClass(score);
 
   if (el.heroConfidencePct) {
@@ -114,7 +127,6 @@ function _renderHero(data) {
   }
 
   if (el.heroConfidence) {
-    /* Remover clases anteriores y aplicar la nueva */
     el.heroConfidence.classList.remove('warn', 'alert');
     if (dotClass) el.heroConfidence.classList.add(dotClass);
     el.heroConfidence.setAttribute(
@@ -123,6 +135,7 @@ function _renderHero(data) {
     );
   }
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -134,17 +147,22 @@ function _renderManualReviewBanner(data) {
   toggle(el.manualReviewBanner, needs);
 
   if (needs && el.manualReviewBanner) {
+    const score = data.confidence_score !== null && data.confidence_score !== undefined
+      ? parseFloat(data.confidence_score)
+      : null;
+
     el.manualReviewBanner.innerHTML = `
       <span class="banner-icon">⚠️</span>
       <span>
         <strong>Revisión manual recomendada.</strong>
         La confianza del OCR fue
-        <strong>${confidenceLabel(data.confidence_score)}</strong>.
+        <strong>${confidenceLabel(score)}</strong>.
         Verifica los valores antes de generar el boletín.
       </span>
     `;
   }
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -164,28 +182,36 @@ function _renderSemaforo(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    KPIs — grid de métricas principales
+   Campos Decimal del backend llegan como strings —
+   se convierten con parseFloat antes de formatear.
    ══════════════════════════════════════════════ */
 function _renderKpis(data) {
   if (!el.kpiGrid) return;
 
+  /* Normalizar Decimals serializados como string */
+  const pct         = data.percentage       !== null ? parseFloat(data.percentage)       : null;
+  const studyTime   = data.study_time_min   !== null ? parseFloat(data.study_time_min)   : null;
+  const targetTime  = data.target_time_min  !== null ? parseFloat(data.target_time_min)  : null;
+
   const kpis = [
     {
       label: 'Porcentaje',
-      value: formatPercent(data.percentage),
+      value: formatPercent(pct),
       icon:  '📊',
-      tone:  _percentTone(data.percentage),
+      tone:  _percentTone(pct),
     },
     {
       label: 'Tiempo estudio',
-      value: formatMinutes(data.study_time_min),
+      value: formatMinutes(studyTime),
       icon:  '⏱',
       tone:  'neutral',
     },
     {
       label: 'Tiempo objetivo',
-      value: formatMinutes(data.target_time_min),
+      value: formatMinutes(targetTime),
       icon:  '🎯',
       tone:  'neutral',
     },
@@ -222,31 +248,53 @@ function _fractionTone(correct, total) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    DETALLES — tabla expandida
+   Incluye todos los campos relevantes de
+   TestResultResponse para el orientador.
    ══════════════════════════════════════════════ */
 function _renderDetails(data) {
   if (!el.detailsGrid) return;
 
+  /* Normalizar Decimals */
+  const pct        = data.percentage      !== null ? parseFloat(data.percentage)      : null;
+  const studyTime  = data.study_time_min  !== null ? parseFloat(data.study_time_min)  : null;
+  const targetTime = data.target_time_min !== null ? parseFloat(data.target_time_min) : null;
+  const confScore  = data.confidence_score !== null && data.confidence_score !== undefined
+    ? parseFloat(data.confidence_score) : null;
+
   const rows = [
-    { label: 'Nivel WS',           value: data.ws                ?? '—' },
+    { label: 'Prueba',              value: data.display_name      ?? '—' },
+    { label: 'Materia',             value: data.subject           ?? '—' },
+    { label: 'Código',              value: data.test_code         ?? '—' },
+    { label: 'Tipo de sujeto',      value: _formatTipoSujeto(data.tipo_sujeto) },
+    { label: 'Nivel WS',            value: data.ws                ?? '—' },
+    { label: 'Nivel actual',        value: data.current_level     ?? '—' },
     { label: 'Punto de inicio',     value: data.starting_point    ?? '—' },
-    { label: 'Tiempo de estudio',   value: formatMinutes(data.study_time_min) },
-    { label: 'Tiempo objetivo',     value: formatMinutes(data.target_time_min) },
+    { label: 'Tiempo de estudio',   value: formatMinutes(studyTime) },
+    { label: 'Tiempo objetivo',     value: formatMinutes(targetTime) },
     { label: 'Aciertos / Total',    value: formatFraction(data.correct_answers, data.total_questions) },
-    { label: 'Porcentaje',          value: formatPercent(data.percentage) },
-    { label: 'Confianza OCR',       value: confidenceLabel(data.confidence_score) },
+    { label: 'Porcentaje',          value: formatPercent(pct) },
+    { label: 'Confianza OCR',       value: confidenceLabel(confScore) },
     { label: 'Revisión manual',
       value: data.needs_manual_review ? '⚠️ Sí' : '✅ No' },
   ];
 
   el.detailsGrid.innerHTML = rows.map(r => `
     <div class="detail-row">
-      <span class="detail-label">${r.label}</span>
-      <span class="detail-value">${r.value}</span>
+      <span class="detail-label">${_escapeHtml(r.label)}</span>
+      <span class="detail-value">${_escapeHtml(String(r.value))}</span>
     </div>
   `).join('');
 }
+
+function _formatTipoSujeto(tipo) {
+  if (!tipo) return '—';
+  const map = { prospecto: 'Prospecto', estudiante: 'Estudiante' };
+  return map[tipo.toLowerCase()] ?? tipo;
+}
+
 
 
 /* ══════════════════════════════════════════════
@@ -270,13 +318,24 @@ function _renderRecommendation(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    AVISO DE VALIDACIÓN PENDIENTE
-   Informa al orientador que debe completar
-   el cuestionario para generar el boletín
+   Solo se muestra si el cuestionario NO está
+   completo todavía.
+   Fuente: TestResultResponse.tiene_observacion
+           TestResultResponse.observacion_completa
    ══════════════════════════════════════════════ */
-function _renderValidationNotice() {
+function _renderValidationNotice(data) {
   if (!el.validationNotice) return;
+
+  /* Si ya existe una observación completa, no mostrar el aviso */
+  const yaCompleto = Boolean(data.tiene_observacion && data.observacion_completa);
+  if (yaCompleto) {
+    hide(el.validationNotice);
+    return;
+  }
+
   el.validationNotice.innerHTML = `
     <span class="notice-icon">📋</span>
     <span>Completa el formulario de validación
@@ -286,16 +345,17 @@ function _renderValidationNotice() {
 }
 
 
+
 /* ══════════════════════════════════════════════
    RESET PÚBLICO
    ══════════════════════════════════════════════ */
 export function resetResultado() {
-  if (el.kpiGrid)          el.kpiGrid.innerHTML      = '';
-  if (el.detailsGrid)      el.detailsGrid.innerHTML  = '';
-  if (el.recommendationBox)el.recommendationBox.innerHTML = '';
-  if (el.resultHeroStudent)el.resultHeroStudent.textContent = '';
-  if (el.resultHeroLevel)  el.resultHeroLevel.textContent   = '';
-  if (el.heroConfidencePct)el.heroConfidencePct.textContent = '';
+  if (el.kpiGrid)           el.kpiGrid.innerHTML               = '';
+  if (el.detailsGrid)       el.detailsGrid.innerHTML           = '';
+  if (el.recommendationBox) el.recommendationBox.innerHTML     = '';
+  if (el.resultHeroStudent) el.resultHeroStudent.textContent   = '';
+  if (el.resultHeroLevel)   el.resultHeroLevel.textContent     = '';
+  if (el.heroConfidencePct) el.heroConfidencePct.textContent   = '';
 
   if (el.heroConfidence) {
     el.heroConfidence.classList.remove('warn', 'alert');
@@ -313,8 +373,9 @@ export function resetResultado() {
 }
 
 
+
 /* ══════════════════════════════════════════════
-   UTILIDAD INTERNA
+   UTILIDADES INTERNAS
    ══════════════════════════════════════════════ */
 function _escapeHtml(str) {
   return String(str)

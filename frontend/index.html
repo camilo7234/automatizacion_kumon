@@ -28,7 +28,6 @@
     <div class="header-inner">
 
       <div class="header-brand">
-        <!-- Logo SVG inline -->
         <svg class="brand-logo" viewBox="0 0 32 32" fill="none"
              xmlns="http://www.w3.org/2000/svg" aria-label="Kumon">
           <rect width="32" height="32" rx="8" fill="currentColor" opacity="0.12"/>
@@ -40,7 +39,9 @@
       </div>
 
       <div class="header-meta">
-        <!-- Indicador estado backend -->
+        <!-- Indicador estado backend
+             backendDot  → .backend-status-dot  (ui.js)
+             backendLabel → .backend-status-text (ui.js) -->
         <div class="backend-status" aria-live="polite">
           <span class="backend-status-dot pending" aria-hidden="true"></span>
           <span class="backend-status-text">Verificando...</span>
@@ -50,14 +51,17 @@
     </div>
   </header>
 
+
   <!-- ══════════════════════════════════════════════════════════
-       MAIN — contenedor de todas las secciones
+       MAIN
   ══════════════════════════════════════════════════════════ -->
   <main class="app-main">
 
+
     <!-- ──────────────────────────────────────────────────────
          SECCIÓN 1 · UPLOAD
-         Visible al inicio. Se oculta al iniciar el pipeline.
+         IDs alineados con VideoUploadForm del backend
+         y con el objeto el.* de ui.js.
     ────────────────────────────────────────────────────────── -->
     <section id="uploadSection" class="app-section">
 
@@ -69,33 +73,46 @@
         </p>
       </div>
 
-      <!-- Alerta upload -->
-      <div id="uploadAlert" class="alert alert-info" style="display:none" role="alert"></div>
+      <div id="uploadAlert" class="alert alert-info"
+           style="display:none" role="alert"></div>
 
       <form id="uploadForm" class="upload-form" novalidate>
 
-        <!-- Datos del prospecto -->
+        <!-- nombre_completo → el.nombreCompletoInput -->
         <div class="form-group">
-          <label class="form-label" for="studentNameInput">
-            Nombre del prospecto <span class="required">*</span>
+          <label class="form-label" for="nombreCompletoInput">
+            Nombre del prospecto
           </label>
           <input
-            id="studentNameInput"
+            id="nombreCompletoInput"
             class="form-input"
             type="text"
             placeholder="Ej. Juan Pérez"
             autocomplete="off"
-            required
           />
         </div>
 
         <div class="form-row">
+
+          <!-- subject → el.subjectInput (obligatorio) -->
           <div class="form-group">
-            <label class="form-label" for="levelInput">
-              Nivel / Test <span class="required">*</span>
+            <label class="form-label" for="subjectInput">
+              Materia <span class="required" aria-hidden="true">*</span>
+            </label>
+            <select id="subjectInput" class="form-input form-select" required>
+              <option value="">— Selecciona —</option>
+              <option value="matematicas">Matemáticas</option>
+              <option value="lectura">Lectura</option>
+            </select>
+          </div>
+
+          <!-- test_code → el.testCodeInput (obligatorio) -->
+          <div class="form-group">
+            <label class="form-label" for="testCodeInput">
+              Código de prueba <span class="required" aria-hidden="true">*</span>
             </label>
             <input
-              id="levelInput"
+              id="testCodeInput"
               class="form-input"
               type="text"
               placeholder="Ej. K1-MAT"
@@ -104,34 +121,23 @@
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="orientadorInput">
-              Orientador <span class="required">*</span>
-            </label>
-            <input
-              id="orientadorInput"
-              class="form-input"
-              type="text"
-              placeholder="Nombre del orientador"
-              autocomplete="off"
-              required
-            />
-          </div>
         </div>
 
-        <!-- Drop zone del archivo -->
+        <!-- Drop zone -->
         <div id="uploadDropZone" class="upload-dropzone" role="button"
              tabindex="0" aria-label="Área para subir video">
           <div class="dropzone-inner">
             <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round"
-                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021
-                       18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+                    d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0
+                       0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
             </svg>
             <p class="dropzone-label">
               Arrastra el video aquí o
-              <label for="uploadInput" class="dropzone-browse">selecciona un archivo</label>
+              <label for="uploadInput" class="dropzone-browse">
+                selecciona un archivo
+              </label>
             </p>
             <p id="uploadDropFilename" class="dropzone-filename"></p>
             <p class="dropzone-hint">MP4, AVI, MOV — máx. 500 MB</p>
@@ -147,7 +153,7 @@
 
         <!-- Barra de progreso upload -->
         <div id="uploadProgressWrap" class="progress-wrap hidden" aria-live="polite">
-          <div class="progress-bar" id="uploadProgressBar" role="progressbar"
+          <div class="progress-bar" role="progressbar"
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div id="uploadProgressFill" class="progress-bar-fill"></div>
           </div>
@@ -160,7 +166,7 @@
             Procesar video
           </button>
           <button id="resetBtn" class="btn btn-ghost" type="button">
-            Reiniciar
+            Nueva sesión
           </button>
         </div>
 
@@ -170,7 +176,8 @@
 
     <!-- ──────────────────────────────────────────────────────
          SECCIÓN 2 · PIPELINE
-         Se muestra mientras el job está procesando.
+         data-step alineados con PIPELINE_STEPS de config.js:
+         upload → queued → processing → done → validated → boletin
     ────────────────────────────────────────────────────────── -->
     <section id="pipelineSection" class="app-section hidden">
 
@@ -178,37 +185,48 @@
         <h2 class="section-title">Procesando video</h2>
         <p class="section-description">
           El sistema está analizando el video. Este proceso puede tardar
-          unos minutos.
+          unos minutos dependiendo de la duración del video.
         </p>
       </div>
 
-      <!-- Pasos del pipeline -->
       <ol class="pipeline-steps" aria-label="Pasos del procesamiento">
-        <li class="pipeline-step" data-step="ocr">
+
+        <li class="pipeline-step" data-step="upload">
           <span class="step-icon" aria-hidden="true"></span>
-          <span class="step-label">Extracción OCR</span>
+          <span class="step-label">Video recibido</span>
           <span class="step-status" aria-live="polite"></span>
         </li>
-        <li class="pipeline-step" data-step="audio">
+
+        <li class="pipeline-step" data-step="queued">
           <span class="step-icon" aria-hidden="true"></span>
-          <span class="step-label">Análisis de audio</span>
+          <span class="step-label">En cola</span>
           <span class="step-status" aria-live="polite"></span>
         </li>
-        <li class="pipeline-step" data-step="qualitative">
+
+        <li class="pipeline-step" data-step="processing">
           <span class="step-icon" aria-hidden="true"></span>
-          <span class="step-label">Señales cualitativas</span>
+          <span class="step-label">Análisis OCR y señales</span>
           <span class="step-status" aria-live="polite"></span>
         </li>
-        <li class="pipeline-step" data-step="calculator">
+
+        <li class="pipeline-step" data-step="done">
           <span class="step-icon" aria-hidden="true"></span>
-          <span class="step-label">Cálculo de resultados</span>
+          <span class="step-label">Resultado calculado</span>
           <span class="step-status" aria-live="polite"></span>
         </li>
-        <li class="pipeline-step" data-step="bulletin">
+
+        <li class="pipeline-step" data-step="validated">
           <span class="step-icon" aria-hidden="true"></span>
-          <span class="step-label">Preparación del boletín</span>
+          <span class="step-label">Validación del orientador</span>
           <span class="step-status" aria-live="polite"></span>
         </li>
+
+        <li class="pipeline-step" data-step="boletin">
+          <span class="step-icon" aria-hidden="true"></span>
+          <span class="step-label">Boletín generado</span>
+          <span class="step-status" aria-live="polite"></span>
+        </li>
+
       </ol>
 
       <!-- Estado y progreso del job -->
@@ -218,7 +236,7 @@
           <span id="jobStatusValue" class="tag tag-default">—</span>
         </div>
 
-        <div id="jobProgressBar" class="progress-wrap" aria-live="polite">
+        <div id="jobProgressBar" class="progress-wrap">
           <div class="progress-bar" role="progressbar"
                aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
             <div id="jobProgressFill" class="progress-bar-fill"></div>
@@ -234,7 +252,6 @@
 
     <!-- ──────────────────────────────────────────────────────
          SECCIÓN 3 · RESULTADO CUANTITATIVO
-         Datos del OCR: semáforo, KPIs, recomendación.
     ────────────────────────────────────────────────────────── -->
     <section id="resultSection" class="app-section hidden">
 
@@ -242,64 +259,47 @@
         <h2 class="section-title">Resultado del diagnóstico</h2>
       </div>
 
-      <!-- Alerta resultado -->
-      <div id="resultAlert" class="alert alert-info" style="display:none" role="alert"></div>
+      <div id="resultAlert" class="alert alert-info"
+           style="display:none" role="alert"></div>
 
-      <!-- Bloque principal de resultado -->
       <div id="resultBlock" class="result-block hidden">
 
-        <!-- Hero estudiante -->
+        <!-- Hero: nombre del sujeto, WS, dot de confianza -->
         <div class="result-hero">
           <div class="result-hero-info">
             <h3 id="resultHeroStudent" class="result-student-name">—</h3>
-            <p id="resultHeroLevel" class="result-student-level">—</p>
+            <p  id="resultHeroLevel"   class="result-student-level">—</p>
           </div>
 
-          <!-- Indicador de confianza OCR -->
-          <div id="heroConfidence" class="confidence-badge hidden">
+          <!-- Confianza OCR — visible siempre, color controlado por JS -->
+          <div id="heroConfidence" class="confidence-badge">
             <span class="confidence-label">Confianza OCR</span>
             <span id="heroConfidencePct" class="confidence-value">—</span>
           </div>
         </div>
 
-        <!-- Banner revisión manual -->
-        <div id="manualReviewBanner" class="review-banner hidden" role="alert">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374
-                     1.948 3.374h14.71c1.73 0 2.813-1.874
-                     1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898
-                     0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
-          </svg>
-          <span>Este resultado requiere revisión manual — la confianza del OCR es baja.</span>
-        </div>
+        <!-- Banner revisión manual — innerHTML gestionado por resultado.js -->
+        <div id="manualReviewBanner" class="review-banner hidden"
+             role="alert" aria-live="assertive"></div>
 
         <!-- Semáforo -->
         <div id="semaforoBlock" class="semaforo-block">
-          <div id="semaforoIcon" class="semaforo-icon" aria-label="Semáforo"></div>
+          <div  id="semaforoIcon"  class="semaforo-icon" aria-label="Semáforo"></div>
           <span id="semaforoLabel" class="semaforo-label">—</span>
         </div>
 
-        <!-- KPIs principales -->
-        <div id="kpiGrid" class="kpi-grid" aria-label="Métricas principales">
-          <!-- Generado por resultado.js -->
-        </div>
+        <!-- KPIs principales — generado por resultado.js -->
+        <div id="kpiGrid" class="kpi-grid" aria-label="Métricas principales"></div>
 
-        <!-- Detalles adicionales -->
-        <div id="detailsGrid" class="details-grid" aria-label="Detalles del test">
-          <!-- Generado por resultado.js -->
-        </div>
+        <!-- Detalles adicionales — generado por resultado.js -->
+        <div id="detailsGrid" class="details-grid" aria-label="Detalles del test"></div>
 
-        <!-- Caja de recomendación pedagógica -->
-        <div id="recommendationBox" class="recommendation-box hidden">
-          <!-- Generado por resultado.js -->
-        </div>
+        <!-- Recomendación pedagógica — generado por resultado.js -->
+        <div id="recommendationBox" class="recommendation-box hidden"></div>
 
-        <!-- Aviso de validación -->
-        <div id="validationNotice" class="validation-notice hidden" role="status">
-          <!-- Generado por resultado.js -->
-        </div>
+        <!-- Aviso validación pendiente — generado por resultado.js -->
+        <div id="validationNotice" class="validation-notice hidden"
+             role="status" aria-live="polite"></div>
 
       </div>
     </section>
@@ -307,45 +307,62 @@
 
     <!-- ──────────────────────────────────────────────────────
          SECCIÓN 4 · CUESTIONARIO CUALITATIVO
-         Formulario del orientador. Se activa tras el resultado.
+         completadoPorInput → nombre del orientador (string)
+         observacion_cualitativa → textarea libre del orientador
     ────────────────────────────────────────────────────────── -->
     <section id="cuestionarioSection" class="app-section hidden">
 
       <div class="section-header">
         <div class="section-header-row">
           <h2 class="section-title">Observación cualitativa</h2>
-          <span id="cuestionarioStatusTag" class="tag tag-default" aria-live="polite">—</span>
+          <span id="cuestionarioStatusTag" class="tag tag-default"
+                aria-live="polite">—</span>
         </div>
         <p id="cuestionarioStudent" class="section-description">—</p>
       </div>
 
-      <!-- Alerta cuestionario -->
-      <div id="cuestionarioAlert" class="alert alert-info" style="display:none" role="alert"></div>
+      <div id="cuestionarioAlert" class="alert alert-info"
+           style="display:none" role="alert"></div>
 
       <form id="cuestionarioForm" class="cuestionario-form" novalidate>
 
-        <!-- Cuerpo del formulario (preguntas inyectadas por cuestionario.js) -->
-        <div id="cuestionarioBody" class="cuestionario-body" aria-live="polite">
-          <!-- Generado dinámicamente por cuestionario.js -->
-        </div>
+        <!-- Preguntas inyectadas dinámicamente por cuestionario.js -->
+        <div id="cuestionarioBody" class="cuestionario-body"
+             aria-live="polite"></div>
 
-        <!-- Observación libre -->
-        <div class="form-group cuestionario-observacion-libre">
-          <label class="form-label" for="completadoPorInput">
-            Observación libre
+        <!-- Observación cualitativa libre del orientador
+             id="observacion_cualitativa" — leído por _getObservacionCualitativa()
+             en cuestionario.js → payload.observacion_cualitativa -->
+        <div class="form-group cuestionario-observacion">
+          <label class="form-label" for="observacion_cualitativa">
+            Observación del orientador
+            <span class="form-hint">(opcional)</span>
           </label>
           <textarea
-            id="completadoPorInput"
+            id="observacion_cualitativa"
             class="form-input form-textarea"
-            rows="3"
-            placeholder="Notas adicionales del orientador (opcional)..."
+            rows="4"
+            placeholder="Observaciones adicionales sobre el desempeño del estudiante..."
           ></textarea>
         </div>
 
-        <!-- Acciones -->
+        <!-- Completado por — el.completadoPorInput → payload.completado_por -->
+        <div class="form-group">
+          <label class="form-label" for="completadoPorInput">
+            Completado por
+          </label>
+          <input
+            id="completadoPorInput"
+            class="form-input"
+            type="text"
+            placeholder="Nombre del orientador"
+            autocomplete="off"
+          />
+        </div>
+
         <div class="form-actions">
           <button id="saveCuestionarioBtn" class="btn btn-primary" type="submit">
-            Generar boletín
+            Guardar validación
           </button>
         </div>
 
@@ -355,7 +372,8 @@
 
     <!-- ──────────────────────────────────────────────────────
          SECCIÓN 5 · BOLETÍN
-         Visor inline del boletín consolidado + descarga PDF.
+         openBoletinBtn → abre/cierra panel de correcciones
+         downloadPdfBtn → descarga PDF
     ────────────────────────────────────────────────────────── -->
     <section id="boletinSection" class="app-section hidden">
 
@@ -363,57 +381,58 @@
         <h2 class="section-title">Boletín de diagnóstico</h2>
       </div>
 
-      <!-- Alerta boletín -->
-      <div id="boletinAlert" class="alert alert-info" style="display:none" role="alert"></div>
+      <div id="boletinAlert" class="alert alert-info"
+           style="display:none" role="alert"></div>
 
-      <!-- Barra de estado del boletín -->
-      <div id="boletinStatusBar" class="boletin-status-bar hidden" aria-live="polite">
-        <!-- Estado inyectado por boletin.js -->
-      </div>
+      <!-- Barra de estado — className gestionado completamente por boletin.js -->
+      <div id="boletinStatusBar" class="boletin-status-bar" aria-live="polite"></div>
 
-      <!-- Contenido completo del boletín -->
+      <!-- Contenido del boletín -->
       <div id="boletinContent" class="boletin-content hidden">
 
-        <!-- Score hero combinado -->
+        <!-- Hero: puntaje combinado + semáforo + confianza -->
         <div class="boletin-hero">
-          <div id="boletinHeroScore" class="boletin-score" aria-label="Puntaje combinado">
-            <!-- Generado por boletin.js -->
-          </div>
+
+          <div id="boletinHeroScore" class="boletin-score"
+               aria-label="Puntaje combinado">—</div>
+
           <div class="boletin-semaforo">
-            <div id="boletinSemaforoIcon" class="semaforo-icon" aria-hidden="true"></div>
+            <div  id="boletinSemaforoIcon"  class="semaforo-icon" aria-hidden="true"></div>
             <span id="boletinSemaforoLabel" class="semaforo-label">—</span>
           </div>
 
-          <!-- Indicador de confianza OCR en boletín -->
+          <!-- Confianza OCR — dot + porcentaje -->
           <div class="boletin-confidence">
-            <span id="boletinConfidenceDot" class="confidence-dot" aria-hidden="true"></span>
+            <span id="boletinConfidenceDot" class="confidence-dot"
+                  aria-hidden="true"></span>
             <span id="boletinConfidencePct" class="confidence-pct">—</span>
           </div>
+
         </div>
 
-        <!-- Métricas del boletín -->
-        <div id="boletinMetricsGrid" class="boletin-metrics-grid" aria-label="Métricas del boletín">
-          <!-- Generado por boletin.js -->
-        </div>
+        <!-- Banner revisión manual inline del boletín
+             id buscado por boletin.js → document.getElementById('boletinManualReviewBanner') -->
+        <div id="boletinManualReviewBanner" class="review-banner hidden"
+             role="alert" aria-live="assertive"></div>
 
-        <!-- Secciones cualitativas del boletín -->
-        <div id="boletinSections" class="boletin-sections" aria-label="Secciones cualitativas">
-          <!-- Generado por boletin.js -->
-        </div>
+        <!-- Métricas cuantitativas — generado por boletin.js -->
+        <div id="boletinMetricsGrid" class="boletin-metrics-grid"
+             aria-label="Métricas del boletín"></div>
 
-        <!-- Observación libre del orientador -->
-        <div id="boletinObservacion" class="boletin-observacion hidden">
-          <!-- Generado por boletin.js -->
-        </div>
+        <!-- Secciones cualitativas — generado por boletin.js -->
+        <div id="boletinSections" class="boletin-sections"
+             aria-label="Secciones cualitativas"></div>
 
-        <!-- Panel de correcciones del orientador -->
+        <!-- Observación cualitativa del orientador — generado por boletin.js -->
+        <div id="boletinObservacion" class="boletin-observacion hidden"></div>
+
+        <!-- Panel de correcciones -->
         <div id="correctionPanel" class="correction-panel hidden">
           <h3 class="correction-panel-title">Correcciones del orientador</h3>
-          <div id="correctionGrid" class="correction-grid" aria-label="Campos a corregir">
-            <!-- Generado por boletin.js -->
-          </div>
+          <div id="correctionGrid" class="correction-grid"
+               aria-label="Campos a corregir"></div>
           <div class="form-actions">
-            <button id="saveCorrectionBtn" class="btn btn-primary" type="button">
+            <button id="saveCorrectionBtn" class="btn btn-secondary" type="button">
               Guardar correcciones
             </button>
           </div>
@@ -423,21 +442,26 @@
 
       <!-- Acciones del boletín -->
       <div class="boletin-actions">
-        <button id="openBoletinBtn" class="btn btn-secondary" type="button" disabled>
+
+        <!-- Abre/cierra el panel de correcciones (no es "ver boletín") -->
+        <button id="openBoletinBtn" class="btn btn-secondary"
+                type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" aria-hidden="true" width="18" height="18">
             <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51
-                     7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431
-                     0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638
-                     0-8.573-3.007-9.963-7.178z"/>
-            <path stroke-linecap="round" stroke-linejoin="round"
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  d="M16.862 4.487l1.687-1.688a1.875 1.875 0
+                     112.652 2.652L10.582 16.07a4.5 4.5 0
+                     01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0
+                     011.13-1.897l8.932-8.931zm0
+                     0L19.5 7.125M18 14v4.75A2.25 2.25 0
+                     0115.75 21H5.25A2.25 2.25 0 013
+                     18.75V8.25A2.25 2.25 0 015.25 6H10"/>
           </svg>
-          Ver boletín
+          ✏️ Corregir valores
         </button>
 
-        <button id="downloadPdfBtn" class="btn btn-primary" type="button" disabled>
+        <button id="downloadPdfBtn" class="btn btn-primary"
+                type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" aria-hidden="true" width="18" height="18">
             <path stroke-linecap="round" stroke-linejoin="round"
@@ -447,11 +471,14 @@
           </svg>
           Descargar PDF
         </button>
+
       </div>
 
     </section>
 
+
   </main>
+
 
   <!-- ══════════════════════════════════════════════════════════
        FOOTER
@@ -460,10 +487,7 @@
     <span>Kumon · Sistema de diagnóstico automatizado</span>
   </footer>
 
-  <!-- ══════════════════════════════════════════════════════════
-       JS — Entry point (módulo ES)
-       app.js importa todo lo demás internamente.
-  ══════════════════════════════════════════════════════════ -->
+  <!-- Entry point ES Module -->
   <script type="module" src="./js/app.js"></script>
 
 </body>

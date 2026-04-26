@@ -8,6 +8,7 @@
         o clase CSS lista para usar en los renderers.
    ============================================================ */
 
+
 import {
   JOB_STATUS,
   BOLETIN_STATUS,
@@ -18,20 +19,26 @@ import {
 } from './config.js';
 
 
+
 /* ══════════════════════════════════════════════
    NÚMEROS
    ══════════════════════════════════════════════ */
 
+
 /**
  * Formatea un número como porcentaje.
- * formatPercent(87.4)   → "87.4%"
- * formatPercent(87.456) → "87.5%"
- * formatPercent(null)   → "—"
+ * Acepta tanto number como string numérico (Decimal serializado).
+ * formatPercent(87.4)    → "87.4%"
+ * formatPercent("85.50") → "85.5%"
+ * formatPercent(null)    → "—"
  */
 export function formatPercent(value, decimals = 1) {
-  if (value === null || value === undefined || isNaN(value)) return '—';
-  return `${Number(value).toFixed(decimals)}%`;
+  if (value === null || value === undefined) return '—';
+  const n = Number(value);
+  if (isNaN(n)) return '—';
+  return `${n.toFixed(decimals)}%`;
 }
+
 
 /**
  * Formatea un número decimal con precisión configurable.
@@ -39,33 +46,42 @@ export function formatPercent(value, decimals = 1) {
  * formatDecimal(null)       → "—"
  */
 export function formatDecimal(value, decimals = 2) {
-  if (value === null || value === undefined || isNaN(value)) return '—';
-  return Number(value).toFixed(decimals);
+  if (value === null || value === undefined) return '—';
+  const n = Number(value);
+  if (isNaN(n)) return '—';
+  return n.toFixed(decimals);
 }
+
 
 /**
  * Formatea un entero con separadores de miles.
- * formatInt(12345) → "12,345"
+ * formatInt(12345) → "12.345"
  */
 export function formatInt(value) {
-  if (value === null || value === undefined || isNaN(value)) return '—';
-  return Number(value).toLocaleString('es-CO');
+  if (value === null || value === undefined) return '—';
+  const n = Number(value);
+  if (isNaN(n)) return '—';
+  return n.toLocaleString('es-CO');
 }
+
 
 /**
  * Formatea minutos como "Xm" o "Xh Ym".
- * formatMinutes(90) → "1h 30m"
- * formatMinutes(45) → "45m"
- * formatMinutes(0)  → "0m"
+ * Acepta tanto number como string numérico.
+ * formatMinutes(90)     → "1h 30m"
+ * formatMinutes("45.0") → "45m"
+ * formatMinutes(0)      → "0m"
  */
 export function formatMinutes(minutes) {
-  if (minutes === null || minutes === undefined || isNaN(minutes)) return '—';
+  if (minutes === null || minutes === undefined) return '—';
   const m = Math.round(Number(minutes));
+  if (isNaN(m)) return '—';
   if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
+  const h   = Math.floor(m / 60);
   const rem = m % 60;
   return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
 }
+
 
 /**
  * Fracción de aciertos: "correct / total"
@@ -78,9 +94,11 @@ export function formatFraction(correct, total) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    FECHAS
    ══════════════════════════════════════════════ */
+
 
 /**
  * Formatea un ISO string como fecha legible.
@@ -102,6 +120,7 @@ export function formatDate(isoString) {
   }
 }
 
+
 /**
  * Solo la hora.
  * formatTime("2026-04-24T17:30:00Z") → "12:30"
@@ -119,9 +138,11 @@ export function formatTime(isoString) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    TEXTO
    ══════════════════════════════════════════════ */
+
 
 /**
  * Primera letra en mayúscula.
@@ -132,8 +153,9 @@ export function titleCase(str) {
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
 
+
 /**
- * Snake_case a palabras.
+ * Snake_case a palabras con espacio.
  * snakeToWords("needs_manual_review") → "Needs Manual Review"
  */
 export function snakeToWords(str) {
@@ -145,56 +167,71 @@ export function snakeToWords(str) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    STATUS DEL JOB
-   Mapea job.status del backend → label legible
+   Mapea job.status del backend → label legible.
+   Incluye "manual_review" como estado terminal.
    ══════════════════════════════════════════════ */
 const JOB_STATUS_LABEL = {
-  [JOB_STATUS.PENDING]:    'En espera',
-  [JOB_STATUS.QUEUED]:     'En cola',
-  [JOB_STATUS.PROCESSING]: 'Procesando',
-  [JOB_STATUS.DONE]:       'Completado',
-  [JOB_STATUS.ERROR]:      'Error',
+  [JOB_STATUS.PENDING]:       'En espera',
+  [JOB_STATUS.QUEUED]:        'En cola',
+  [JOB_STATUS.PROCESSING]:    'Procesando',
+  [JOB_STATUS.DONE]:          'Completado',
+  [JOB_STATUS.ERROR]:         'Error',
+  [JOB_STATUS.MANUAL_REVIEW]: 'Revisión manual',
 };
 
+
 /**
- * prettyStatus("processing") → "Procesando"
+ * prettyStatus("processing")    → "Procesando"
+ * prettyStatus("manual_review") → "Revisión manual"
  */
 export function prettyStatus(status) {
-  return JOB_STATUS_LABEL[status] ?? titleCase(status ?? '—');
+  return JOB_STATUS_LABEL[status] ?? snakeToWords(status ?? '—');
 }
+
 
 /**
  * Clase CSS del tag según el status del job.
- * tagTypeForStatus("done") → "success"
+ * tagTypeForStatus("done")          → "success"
+ * tagTypeForStatus("manual_review") → "warning"
  */
 export function tagTypeForStatus(status) {
   const map = {
-    [JOB_STATUS.PENDING]:    'default',
-    [JOB_STATUS.QUEUED]:     'warning',
-    [JOB_STATUS.PROCESSING]: 'info',
-    [JOB_STATUS.DONE]:       'success',
-    [JOB_STATUS.ERROR]:      'danger',
+    [JOB_STATUS.PENDING]:       'default',
+    [JOB_STATUS.QUEUED]:        'warning',
+    [JOB_STATUS.PROCESSING]:    'info',
+    [JOB_STATUS.DONE]:          'success',
+    [JOB_STATUS.ERROR]:         'danger',
+    [JOB_STATUS.MANUAL_REVIEW]: 'warning',
   };
   return map[status] ?? 'default';
 }
 
+
 /**
- * Label del progreso según el status.
+ * Label del progreso según el status y porcentaje.
  * prettyProgressLabel("processing", 65) → "Procesando — 65%"
+ * prettyProgressLabel("processing", null) → "Procesando"
+ *
+ * NOTA: isNaN(null) === false en JS — se verifica null explícitamente
+ * antes para evitar mostrar "0%" cuando no hay dato de progreso.
  */
 export function prettyProgressLabel(status, pct) {
   const label = prettyStatus(status);
-  if (pct !== null && pct !== undefined && !isNaN(pct)) {
-    return `${label} — ${Math.round(pct)}%`;
+  if (pct !== null && pct !== undefined && !isNaN(Number(pct))) {
+    return `${label} — ${Math.round(Number(pct))}%`;
   }
   return label;
 }
 
 
+
 /* ══════════════════════════════════════════════
    SEMÁFORO
    ══════════════════════════════════════════════ */
+
 
 /**
  * Emoji del semáforo.
@@ -204,6 +241,7 @@ export function semaforoEmoji(value) {
   return SEMAFORO_EMOJI[value] ?? '⚪';
 }
 
+
 /**
  * Label legible del semáforo.
  * semaforoLabelText("rojo") → "Necesita refuerzo"
@@ -212,10 +250,11 @@ export function semaforoLabelText(value) {
   return SEMAFORO_LABEL[value] ?? '—';
 }
 
+
 /**
  * Clase CSS del bloque semáforo.
  * toneForSemaforo("amarillo") → "amarillo"
- * (coincide con las clases CSS .semaforo-block.verde/amarillo/rojo)
+ * (coincide con clases CSS .semaforo-block.verde / .amarillo / .rojo)
  */
 export function toneForSemaforo(value) {
   const valid = [SEMAFORO.VERDE, SEMAFORO.AMARILLO, SEMAFORO.ROJO];
@@ -223,22 +262,27 @@ export function toneForSemaforo(value) {
 }
 
 
+
 /* ══════════════════════════════════════════════
-   CONFIANZA OCR (confidence_score)
+   CONFIANZA OCR (confidence_score: float 0.0–1.0)
    ══════════════════════════════════════════════ */
+
 
 /**
  * Clase CSS del dot de confianza.
- * confidenceDotClass(0.90) → ""        (verde — default)
- * confidenceDotClass(0.70) → "warn"    (amarillo)
- * confidenceDotClass(0.50) → "alert"   (rojo)
+ * confidenceDotClass(0.90) → ""       (verde — sin modificador)
+ * confidenceDotClass(0.70) → "warn"   (amarillo)
+ * confidenceDotClass(0.50) → "alert"  (rojo)
+ * confidenceDotClass(null) → ""       (neutro — dato ausente, no alerta)
  */
 export function confidenceDotClass(score) {
-  if (score === null || score === undefined) return 'warn';
-  if (score >= CONFIDENCE.HIGH)   return '';       // verde (sin modificador)
+  /* null/undefined → dato ausente, no alarmar con color warning */
+  if (score === null || score === undefined) return '';
+  if (score >= CONFIDENCE.HIGH)   return '';      // verde (sin modificador)
   if (score >= CONFIDENCE.MEDIUM) return 'warn';
   return 'alert';
 }
+
 
 /**
  * Label de confianza legible.
@@ -251,9 +295,11 @@ export function confidenceLabel(score) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    BOLETÍN STATUS
    ══════════════════════════════════════════════ */
+
 
 /**
  * Clase CSS de la barra de estado del boletín.
@@ -267,6 +313,7 @@ export function boletinStatusClass(status) {
   };
   return map[status] ?? 'pending';
 }
+
 
 /**
  * Label del estado del boletín.
@@ -282,26 +329,32 @@ export function boletinStatusLabel(status) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    ETIQUETA CUALITATIVA
-   Mapea etiqueta_cualitativa del backend
-   a un label legible para el visor del boletín
+   Mapea etiqueta_cualitativa del backend a un
+   label y tipo de tag para el visor del boletín.
    ══════════════════════════════════════════════ */
 const ETIQUETA_MAP = {
-  fortaleza:   { label: 'Fortaleza',         type: 'success' },
-  proceso:     { label: 'En proceso',         type: 'warning' },
-  atencion:    { label: 'Requiere atención',  type: 'danger'  },
-  desarrollo:  { label: 'En desarrollo',      type: 'info'    },
-  logrado:     { label: 'Logrado',            type: 'success' },
+  fortaleza:    { label: 'Fortaleza',          type: 'success' },
+  proceso:      { label: 'En proceso',          type: 'warning' },
+  atencion:     { label: 'Requiere atención',   type: 'danger'  },
+  desarrollo:   { label: 'En desarrollo',       type: 'info'    },
+  logrado:      { label: 'Logrado',             type: 'success' },
+  no_evaluado:  { label: 'No evaluado',         type: 'default' },
 };
+
 
 /**
  * Retorna { label, type } para una etiqueta cualitativa.
- * etiquetaInfo("fortaleza") → { label: "Fortaleza", type: "success" }
+ * etiquetaInfo("fortaleza")   → { label: "Fortaleza", type: "success" }
+ * etiquetaInfo("no_evaluado") → { label: "No evaluado", type: "default" }
+ * etiquetaInfo(null)          → { label: "—", type: "default" }
  */
 export function etiquetaInfo(etiqueta) {
-  return ETIQUETA_MAP[etiqueta?.toLowerCase()] ?? {
-    label: titleCase(etiqueta ?? '—'),
+  if (!etiqueta) return { label: '—', type: 'default' };
+  return ETIQUETA_MAP[etiqueta.toLowerCase()] ?? {
+    label: snakeToWords(etiqueta),  // snake_case → palabras legibles
     type:  'default',
   };
 }
