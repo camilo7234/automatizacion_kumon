@@ -2,76 +2,73 @@
    KUMON · LAYOUT
    Archivo: frontend/css/layout.css
    Depende de: tokens.css, base.css
-   Rol: Estructura visual completa de la app — hero superior,
-        contenedor principal, columna izquierda (upload +
-        pipeline + resultado) y columna derecha (cuestionario
-        + boletín). Responsive 375px → 1480px.
+   Clases alineadas con index.html:
+   .app-header · .app-main · .app-section · .app-footer
    ============================================================ */
 
+
 /* ══════════════════════════════════════════════
-   HERO / HEADER
+   APP HEADER
    ══════════════════════════════════════════════ */
-.hero {
+.app-header {
   background:  var(--grad-hero);
   color:       #fff;
-  padding:     var(--space-6) var(--space-8);
-  display:     flex;
-  align-items: center;
-  gap:         var(--space-4);
-  box-shadow:  0 4px 20px rgba(0, 58, 140, 0.22);
   position:    sticky;
   top:         0;
   z-index:     100;
+  box-shadow:  0 4px 20px rgba(0, 58, 140, 0.22);
 }
 
-.hero-logo {
-  width:        42px;
-  height:       42px;
-  background:   rgba(255,255,255,0.18);
-  border:       2px solid rgba(255,255,255,0.35);
-  border-radius: var(--radius-sm);
-  display:      flex;
-  align-items:  center;
-  justify-content: center;
-  font-size:    var(--text-xl);
-  font-weight:  900;
-  color:        #fff;
-  flex-shrink:  0;
+.header-inner {
+  max-width:       var(--content-max);
+  margin:          0 auto;
+  padding:         var(--space-4) var(--space-6);
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             var(--space-4);
 }
 
-.hero-titles {
-  display:        flex;
-  flex-direction: column;
-  gap:            2px;
-}
-
-.hero-title {
-  font-size:   var(--text-xl);
-  font-weight: 800;
-  color:       #fff;
-  line-height: 1.1;
-}
-
-.hero-subtitle {
-  font-size: var(--text-xs);
-  color:     rgba(255,255,255,0.72);
-  font-weight: 500;
-}
-
-.hero-right {
-  margin-left: auto;
+.header-brand {
   display:     flex;
   align-items: center;
   gap:         var(--space-3);
 }
 
-/* Indicador de conexión al backend */
+.brand-logo {
+  width:         38px;
+  height:        38px;
+  flex-shrink:   0;
+  color:         #fff;
+}
+
+.brand-name {
+  font-size:   var(--text-lg);
+  font-weight: 800;
+  color:       #fff;
+  line-height: 1.1;
+}
+
+.brand-sub {
+  font-weight: 400;
+  font-size:   var(--text-sm);
+  color:       rgba(255,255,255,0.75);
+  margin-left: var(--space-2);
+}
+
+.header-meta {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-4);
+}
+
+/* Indicador backend */
 .backend-status {
   display:     flex;
   align-items: center;
   gap:         var(--space-2);
   font-size:   var(--text-xs);
-  color:       rgba(255,255,255,0.75);
+  color:       rgba(255,255,255,0.80);
   font-weight: 500;
 }
 
@@ -79,9 +76,9 @@
   width:         8px;
   height:        8px;
   border-radius: var(--radius-full);
-  background:    #fbbf24;
   flex-shrink:   0;
   transition:    background var(--transition);
+  background:    #fbbf24; /* pending por defecto */
 }
 
 .backend-status-dot.ok      { background: #34d399; }
@@ -90,48 +87,24 @@
 
 
 /* ══════════════════════════════════════════════
-   CONTENEDOR PRINCIPAL DE LA APP
+   APP MAIN
    ══════════════════════════════════════════════ */
-.app {
-  max-width: var(--content-max);
+.app-main {
+  max-width: 860px;
   margin:    0 auto;
   padding:   var(--space-8) var(--space-6);
+  display:   flex;
+  flex-direction: column;
+  gap:       var(--space-6);
 }
 
 
 /* ══════════════════════════════════════════════
-   LAYOUT DE DOS COLUMNAS
+   APP SECTION — card genérica
+   Cada sección (upload, pipeline, result,
+   cuestionario, boletin) es una card.
    ══════════════════════════════════════════════ */
-.layout {
-  display:               grid;
-  grid-template-columns: minmax(var(--col-left-min), 1fr) minmax(420px, 0.7fr);
-  gap:                   var(--space-8);
-  align-items:           start;
-}
-
-.left-col {
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--space-6);
-  position:       sticky;
-  top:            calc(74px + var(--space-6));
-  max-height:     calc(100dvh - 74px - var(--space-12));
-  overflow-y:     auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
-}
-
-.right-col {
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--space-6);
-}
-
-
-/* ══════════════════════════════════════════════
-   SECCIÓN GENÉRICA
-   ══════════════════════════════════════════════ */
-.section {
+.app-section {
   background:    var(--surface);
   border:        1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -140,61 +113,109 @@
 }
 
 .section-header {
+  padding:       var(--space-5) var(--space-6);
+  border-bottom: 1px solid var(--line);
+  background:    var(--grad-surface-2);
+}
+
+.section-header-row {
   display:         flex;
   align-items:     center;
   justify-content: space-between;
-  padding:         var(--space-5) var(--space-6);
-  border-bottom:   1px solid var(--line);
-  background:      var(--grad-surface-2);
   gap:             var(--space-3);
+  flex-wrap:       wrap;
 }
 
-.section-header h2 {
+.section-title {
   font-size:   var(--text-lg);
   font-weight: 700;
   color:       var(--text);
-  display:     flex;
-  align-items: center;
-  gap:         var(--space-2);
+  line-height: 1.2;
 }
 
-.section-body {
-  padding:        var(--space-5) var(--space-6);
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--space-5);
+.section-description {
+  font-size:  var(--text-sm);
+  color:      var(--muted);
+  margin-top: var(--space-1);
+  max-width:  none;
+}
+
+/* Padding interior de secciones
+   Los módulos CSS añaden sus propios paddings
+   a los contenedores internos */
+.upload-form,
+.cuestionario-form,
+.boletin-content,
+.result-block,
+.job-status-block {
+  padding: var(--space-5) var(--space-6);
+}
+
+/* Pipeline steps están dentro de la sección
+   sin el wrapper de form */
+.pipeline-steps {
+  padding: var(--space-5) var(--space-6) 0;
+}
+
+/* Alertas van dentro de la sección con padding */
+.app-section > .alert {
+  margin: var(--space-4) var(--space-6) 0;
 }
 
 
 /* ══════════════════════════════════════════════
-   RESPONSIVE — TABLET (≤ 1180px)
+   APP FOOTER
    ══════════════════════════════════════════════ */
-@media (max-width: 1180px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-  .left-col {
-    position:   static;
-    max-height: none;
-    overflow-y: visible;
-  }
+.app-footer {
+  text-align:    center;
+  padding:       var(--space-6);
+  font-size:     var(--text-xs);
+  color:         var(--muted);
+  border-top:    1px solid var(--line);
+  margin-top:    var(--space-4);
 }
 
 
 /* ══════════════════════════════════════════════
-   RESPONSIVE — MOBILE (≤ 640px)
+   RESPONSIVE — TABLET (≤ 900px)
    ══════════════════════════════════════════════ */
-@media (max-width: 640px) {
-  .hero        { padding: var(--space-4); }
-  .hero-subtitle { display: none; }
-  .app         { padding: var(--space-4) var(--space-3); }
-  .section-header { padding: var(--space-4); flex-wrap: wrap; }
-  .section-body   { padding: var(--space-4); }
-  .btn-row        { flex-direction: column; align-items: stretch; }
-  .btn-row .btn   { width: 100%; justify-content: center; }
+@media (max-width: 900px) {
+  .app-main {
+    padding: var(--space-6) var(--space-4);
+  }
+  .section-header,
+  .upload-form,
+  .cuestionario-form,
+  .boletin-content,
+  .result-block,
+  .job-status-block {
+    padding-left:  var(--space-4);
+    padding-right: var(--space-4);
+  }
+  .pipeline-steps { padding-left: var(--space-4); padding-right: var(--space-4); }
+  .app-section > .alert { margin-left: var(--space-4); margin-right: var(--space-4); }
 }
 
-@media (max-width: 400px) {
-  .hero-logo  { width: 34px; height: 34px; }
-  .hero-title { font-size: var(--text-lg); }
+
+/* ══════════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 600px)
+   ══════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .header-inner {
+    padding: var(--space-3) var(--space-4);
+  }
+  .brand-sub { display: none; }
+  .app-main {
+    padding: var(--space-4) var(--space-3);
+    gap:     var(--space-4);
+  }
+  .section-header,
+  .upload-form,
+  .cuestionario-form,
+  .boletin-content,
+  .result-block,
+  .job-status-block {
+    padding-left:  var(--space-4);
+    padding-right: var(--space-4);
+  }
 }

@@ -43,7 +43,7 @@ export const ENDPOINTS = {
   patchBoletin: (resultId)         => `${API_BASE}/api/v1/boletin/${resultId}`,
 
   /* ── HEALTH ── */
-  health: ()                       => `${API_BASE}/api/v1/health`,
+  health: ()                       => `${API_BASE}/health`,
 };
 
 
@@ -101,10 +101,9 @@ export const JOB_ACTIVE_STATES = new Set([
    ══════════════════════════════════════════════ */
 export const BOLETIN_STATUS = {
   PENDING:   'pending',
-  READY:     'ready',                    // valor real que retorna el backend
+  GENERATED: 'generated',   // valor real del backend
   CORREGIDO: 'corregido_por_orientador',
 };
-
 
 
 /* ══════════════════════════════════════════════

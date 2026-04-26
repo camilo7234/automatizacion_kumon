@@ -2,111 +2,110 @@
    KUMON · MÓDULO RESULTADO
    Archivo: frontend/css/modules/result.css
    Depende de: tokens.css, components.css
-   Rol: Visualización del resultado extraído del video.
-        Conectado con GET /api/v1/results/job/{jobId}
-        Campos que llegan del backend:
-          ws, study_time_min, target_time_min,
-          correct_answers, total_questions, percentage,
-          semaforo, starting_point, recommendation,
-          confidence_score, needs_manual_review,
-          student_name, level, orientador
+   Clases alineadas con index.html:
+   #resultBlock · .result-block
+   .result-hero · .result-hero-info
+   #resultHeroStudent → .result-student-name
+   #resultHeroLevel   → .result-student-level
+   #heroConfidence    → .confidence-badge (components.css)
+   #manualReviewBanner → .review-banner (components.css)
+   #semaforoBlock · #semaforoIcon · #semaforoLabel
+   #kpiGrid · #detailsGrid · #recommendationBox
+   #validationNotice
    ============================================================ */
 
+
 /* ══════════════════════════════════════════════
-   HERO DEL RESULTADO
-   Bloque principal con gradiente y score central
+   BLOQUE CONTENEDOR PRINCIPAL
+   #resultBlock.result-block
+   padding viene de layout.css
+   ══════════════════════════════════════════════ */
+.result-block {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-5);
+}
+
+
+/* ══════════════════════════════════════════════
+   HERO — nombre + nivel + confianza OCR
+   .result-hero
    ══════════════════════════════════════════════ */
 .result-hero {
-  background:    var(--grad-result);
-  border-radius: var(--radius-md);
-  padding:       var(--space-6);
-  color:         #fff;
-  display:       flex;
-  flex-direction: column;
-  gap:           var(--space-4);
-  position:      relative;
-  overflow:      hidden;
-}
-
-/* Decoración de fondo sutil */
-.result-hero::after {
-  content:       '';
-  position:      absolute;
-  top:           -40px;
-  right:         -40px;
-  width:         160px;
-  height:        160px;
-  border-radius: var(--radius-full);
-  background:    rgba(255,255,255,0.06);
-  pointer-events: none;
-}
-
-.result-hero-top {
   display:         flex;
   align-items:     flex-start;
   justify-content: space-between;
   gap:             var(--space-4);
   flex-wrap:       wrap;
+  padding:         var(--space-5);
+  background:      var(--grad-result);
+  border-radius:   var(--radius-md);
+  position:        relative;
+  overflow:        hidden;
 }
 
-.result-hero-meta {
+/* Decoración de fondo */
+.result-hero::after {
+  content:        '';
+  position:       absolute;
+  top:            -40px;
+  right:          -40px;
+  width:          160px;
+  height:         160px;
+  border-radius:  var(--radius-full);
+  background:     rgba(255,255,255,0.06);
+  pointer-events: none;
+}
+
+.result-hero-info {
   display:        flex;
   flex-direction: column;
   gap:            var(--space-1);
+  position:       relative;
+  z-index:        1;
 }
 
-.result-hero-student {
+/* #resultHeroStudent */
+.result-student-name {
   font-size:   var(--text-xl);
   font-weight: 800;
   color:       #fff;
   line-height: 1.1;
 }
 
-.result-hero-level {
+/* #resultHeroLevel */
+.result-student-level {
   font-size:   var(--text-sm);
-  color:       rgba(255,255,255,0.75);
+  color:       rgba(255,255,255,0.78);
   font-weight: 500;
 }
 
-/* Confianza del OCR — crítico para orientador */
-.result-confidence {
-  display:        flex;
-  flex-direction: column;
-  align-items:    flex-end;
-  gap:            var(--space-1);
+/* #heroConfidence — .confidence-badge está en components.css
+   Aquí solo sobreescribimos colores para que funcione
+   sobre el fondo de gradiente */
+.result-hero .confidence-badge {
+  position:      relative;
+  z-index:       1;
+  background:    rgba(255,255,255,0.18);
+  border-color:  rgba(255,255,255,0.30);
+  flex-shrink:   0;
+  align-self:    flex-start;
 }
 
-.result-confidence-value {
-  font-size:   var(--text-2xl);
-  font-weight: 900;
-  color:       #fff;
-  line-height: 1;
+.result-hero .confidence-label {
+  color: rgba(255,255,255,0.80);
 }
 
-.result-confidence-label {
-  font-size:   var(--text-xs);
-  color:       rgba(255,255,255,0.70);
-  font-weight: 500;
-}
-
-/* Alerta si needs_manual_review = true */
-.result-manual-review-banner {
-  display:       flex;
-  align-items:   center;
-  gap:           var(--space-2);
-  padding:       var(--space-2) var(--space-4);
-  background:    rgba(251, 191, 36, 0.18);
-  border:        1px solid rgba(251, 191, 36, 0.45);
-  border-radius: var(--radius-sm);
-  font-size:     var(--text-xs);
-  font-weight:   600;
-  color:         #fef3c7;
+.result-hero .confidence-value {
+  color: #fff;
 }
 
 
 /* ══════════════════════════════════════════════
-   SEMÁFORO (resultado principal del test)
-   Valores: verde / amarillo / rojo
+   SEMÁFORO
+   #semaforoBlock · #semaforoIcon · #semaforoLabel
+   La clase de color (verde/amarillo/rojo) es
+   añadida por resultado.js → _renderSemaforo
    ══════════════════════════════════════════════ */
 .semaforo-block {
   display:        flex;
@@ -120,48 +119,33 @@
   transition:     background var(--transition), border-color var(--transition);
 }
 
-.semaforo-block.verde {
-  background:   var(--success-bg);
-  border-color: var(--success-line);
-}
+.semaforo-block.verde    { background: var(--success-bg);  border-color: var(--success-line); }
+.semaforo-block.amarillo { background: var(--warning-bg);  border-color: var(--warning-line); }
+.semaforo-block.rojo     { background: var(--danger-bg);   border-color: var(--danger-line); }
 
-.semaforo-block.amarillo {
-  background:   var(--warning-bg);
-  border-color: var(--warning-line);
-}
-
-.semaforo-block.rojo {
-  background:   var(--danger-bg);
-  border-color: var(--danger-line);
-}
-
-/* Icono grande del semáforo */
+/* #semaforoIcon — emoji inyectado por resultado.js */
 .semaforo-icon {
-  font-size:  2.8rem;
+  font-size:   2.8rem;
   line-height: 1;
 }
 
+/* #semaforoLabel */
 .semaforo-label {
-  font-size:   var(--text-sm);
-  font-weight: 700;
+  font-size:      var(--text-sm);
+  font-weight:    700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.semaforo-block.verde  .semaforo-label { color: var(--semaforo-verde); }
+.semaforo-block.verde    .semaforo-label { color: var(--semaforo-verde); }
 .semaforo-block.amarillo .semaforo-label { color: var(--semaforo-amarillo); }
-.semaforo-block.rojo   .semaforo-label { color: var(--semaforo-rojo); }
-
-.semaforo-desc {
-  font-size:  var(--text-xs);
-  color:      var(--muted);
-  max-width:  28ch;
-  line-height: 1.5;
-}
+.semaforo-block.rojo     .semaforo-label { color: var(--semaforo-rojo); }
 
 
 /* ══════════════════════════════════════════════
-   KPI SCORES (porcentaje, aciertos, tiempo)
+   KPI GRID
+   #kpiGrid — innerHTML generado por resultado.js
+   Genera .kpi-card con .kpi-value y .kpi-label
    ══════════════════════════════════════════════ */
 .kpi-grid {
   display:               grid;
@@ -188,17 +172,9 @@
   line-height: 1;
 }
 
-.kpi-value.highlight {
-  color: var(--semaforo-verde);
-}
-
-.kpi-value.warn {
-  color: var(--semaforo-amarillo);
-}
-
-.kpi-value.alert {
-  color: var(--semaforo-rojo);
-}
+.kpi-value.highlight { color: var(--semaforo-verde); }
+.kpi-value.warn      { color: var(--semaforo-amarillo); }
+.kpi-value.alert     { color: var(--semaforo-rojo); }
 
 .kpi-label {
   font-size:      var(--text-xs);
@@ -211,59 +187,21 @@
 
 
 /* ══════════════════════════════════════════════
-   TABLA DE DATOS EXTRAÍDOS
-   detail-box reutiliza components.css
-   Este bloque es para la disposición específica
-   del resultado del video
+   DETAILS GRID
+   #detailsGrid — usa .details-grid + .detail-box
+   de components.css · aquí solo override de padding
    ══════════════════════════════════════════════ */
-.result-details-section {
-  display:        flex;
-  flex-direction: column;
-  gap:            var(--space-3);
-}
-
-.result-details-title {
-  font-size:   var(--text-sm);
-  font-weight: 700;
-  color:       var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* Tiempo: muestra estudio vs objetivo */
-.time-comparison {
-  display:       flex;
-  align-items:   center;
-  gap:           var(--space-3);
-  padding:       var(--space-3) var(--space-4);
-  background:    var(--surface-2);
-  border:        1px solid var(--line);
-  border-radius: var(--radius-sm);
-  font-size:     var(--text-sm);
-  flex-wrap:     wrap;
-}
-
-.time-comparison-value {
-  font-weight: 800;
-  color:       var(--text);
-  font-size:   var(--text-base);
-}
-
-.time-comparison-sep {
-  color:     var(--text-faint);
-  font-size: var(--text-xs);
-}
-
-.time-comparison-target {
-  color:       var(--muted);
-  font-size:   var(--text-xs);
-  font-weight: 500;
+.details-grid {
+  display:               grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap:                   var(--space-3);
 }
 
 
 /* ══════════════════════════════════════════════
-   RECOMENDACIÓN DEL SISTEMA
-   Campo: recommendation del backend
+   RECOMENDACIÓN PEDAGÓGICA
+   #recommendationBox.recommendation-box
+   innerHTML generado por resultado.js
    ══════════════════════════════════════════════ */
 .recommendation-box {
   padding:       var(--space-4);
@@ -276,35 +214,31 @@
 }
 
 .recommendation-box strong {
-  display:       block;
-  font-size:     var(--text-xs);
+  display:        block;
+  font-size:      var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: var(--space-2);
-  color:         var(--primary);
-  font-weight:   700;
+  margin-bottom:  var(--space-2);
+  color:          var(--primary);
+  font-weight:    700;
 }
 
 
 /* ══════════════════════════════════════════════
-   NOTICE: validación pendiente
-   Visible cuando el resultado llegó pero el
-   cuestionario aún no fue completado
+   VALIDATION NOTICE
+   #validationNotice.validation-notice
+   innerHTML generado por resultado.js
    ══════════════════════════════════════════════ */
 .validation-notice {
-  display:        flex;
-  align-items:    center;
-  gap:            var(--space-3);
-  padding:        var(--space-4);
-  background:     var(--warning-bg);
-  border:         1px solid var(--warning-line);
-  border-radius:  var(--radius-sm);
-  font-size:      var(--text-sm);
-  color:          var(--warning-text);
-  font-weight:    500;
-}
-
-.validation-notice-icon {
-  font-size:  1.4rem;
-  flex-shrink: 0;
+  display:      flex;
+  align-items:  center;
+  gap:          var(--space-3);
+  padding:      var(--space-4);
+  background:   var(--warning-bg);
+  border:       1px solid var(--warning-line);
+  border-radius: var(--radius-sm);
+  font-size:    var(--text-sm);
+  color:        var(--warning-text);
+  font-weight:  500;
+  line-height:  1.5;
 }
