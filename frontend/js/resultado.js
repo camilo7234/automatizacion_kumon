@@ -97,45 +97,22 @@ export async function loadResultado(jobId) {
 
 
 /* ══════════════════════════════════════════════
-   HERO — sujeto, nivel, dot de confianza
+   HERO — estudiante y nivel de prueba
    Fuente: TestResultResponse
-     nombre_sujeto  — nombre del prospecto o estudiante
-     ws             — código de la hoja de trabajo (ej: "5A")
-     confidence_score — Decimal serializado como string "0.00–1.00"
+     nombre_sujeto — nombre del prospecto o estudiante
+     ws            — código de la hoja de trabajo (ej: "P4")
    ══════════════════════════════════════════════ */
 function _renderHero(data) {
-  /* nombre_sujeto es el campo real de TestResultResponse */
   if (el.resultHeroStudent) {
     el.resultHeroStudent.textContent =
       data.nombre_sujeto?.trim() || 'Sin nombre';
   }
 
-  /* ws: código de la hoja de trabajo */
   if (el.resultHeroLevel) {
     el.resultHeroLevel.textContent =
-      data.ws ? `WS ${data.ws}` : '—';
-  }
-
-  /* confidence_score llega como string Decimal — convertir a float */
-  const score = data.confidence_score !== null && data.confidence_score !== undefined
-    ? parseFloat(data.confidence_score)
-    : null;
-  const dotClass = confidenceDotClass(score);
-
-  if (el.heroConfidencePct) {
-    el.heroConfidencePct.textContent = confidenceLabel(score);
-  }
-
-  if (el.heroConfidence) {
-    el.heroConfidence.classList.remove('warn', 'alert');
-    if (dotClass) el.heroConfidence.classList.add(dotClass);
-    el.heroConfidence.setAttribute(
-      'title',
-      `Confianza OCR: ${confidenceLabel(score)}`
-    );
+      data.ws ? `Nivel ${data.ws}` : '—';
   }
 }
-
 
 
 /* ══════════════════════════════════════════════
@@ -185,53 +162,58 @@ function _renderSemaforo(data) {
 
 /* ══════════════════════════════════════════════
    KPIs — grid de métricas principales
-   Campos Decimal del backend llegan como strings —
-   se convierten con parseFloat antes de formatear.
+   Solo muestra las 6 métricas requeridas:
+   materia, nivel, tiempos con decimal,
+   aciertos y porcentaje.
    ══════════════════════════════════════════════ */
 function _renderKpis(data) {
   if (!el.kpiGrid) return;
 
-  /* Normalizar Decimals serializados como string */
-  const pct         = data.percentage       !== null ? parseFloat(data.percentage)       : null;
-  const studyTime   = data.study_time_min   !== null ? parseFloat(data.study_time_min)   : null;
-  const targetTime  = data.target_time_min  !== null ? parseFloat(data.target_time_min)  : null;
+  const pct        = data.percentage      != null ? parseFloat(data.percentage)      : null;
+  const studyTime  = data.study_time_min  != null ? parseFloat(data.study_time_min)  : null;
+  const targetTime = data.target_time_min != null ? parseFloat(data.target_time_min) : null;
 
   const kpis = [
+    {
+      label: 'Materia',
+      value: data.subject ?? '—',
+      icon:  '📚',
+    },
+    {
+      label: 'Nivel de prueba',
+      value: data.ws ?? '—',
+      icon:  '🎓',
+    },
+    {
+      label: 'Tiempo de estudio (min)',
+      value: formatDecimal(studyTime, 2),
+      icon:  '⏱',
+    },
+    {
+      label: 'Tiempo objetivo (min)',
+      value: formatDecimal(targetTime, 2),
+      icon:  '🎯',
+    },
+    {
+      label: 'Aciertos / Total',
+      value: formatFraction(data.correct_answers, data.total_questions),
+      icon:  '✅',
+    },
     {
       label: 'Porcentaje',
       value: formatPercent(pct),
       icon:  '📊',
-      tone:  _percentTone(pct),
-    },
-    {
-      label: 'Tiempo estudio',
-      value: formatMinutes(studyTime),
-      icon:  '⏱',
-      tone:  'neutral',
-    },
-    {
-      label: 'Tiempo objetivo',
-      value: formatMinutes(targetTime),
-      icon:  '🎯',
-      tone:  'neutral',
-    },
-    {
-      label: 'Aciertos',
-      value: formatFraction(data.correct_answers, data.total_questions),
-      icon:  '✅',
-      tone:  _fractionTone(data.correct_answers, data.total_questions),
     },
   ];
 
   el.kpiGrid.innerHTML = kpis.map(k => `
-    <div class="kpi-card tone-${k.tone}">
+    <div class="kpi-card">
       <span class="kpi-icon">${k.icon}</span>
       <span class="kpi-value">${k.value}</span>
       <span class="kpi-label">${k.label}</span>
     </div>
   `).join('');
 }
-
 function _percentTone(pct) {
   if (pct === null || pct === undefined) return 'neutral';
   if (pct >= 80) return 'success';
@@ -350,16 +332,12 @@ function _renderValidationNotice(data) {
    RESET PÚBLICO
    ══════════════════════════════════════════════ */
 export function resetResultado() {
-  if (el.kpiGrid)           el.kpiGrid.innerHTML               = '';
-  if (el.detailsGrid)       el.detailsGrid.innerHTML           = '';
-  if (el.recommendationBox) el.recommendationBox.innerHTML     = '';
-  if (el.resultHeroStudent) el.resultHeroStudent.textContent   = '';
-  if (el.resultHeroLevel)   el.resultHeroLevel.textContent     = '';
-  if (el.heroConfidencePct) el.heroConfidencePct.textContent   = '';
+  if (el.kpiGrid)           el.kpiGrid.innerHTML             = '';
+  if (el.detailsGrid)       el.detailsGrid.innerHTML         = '';
+  if (el.recommendationBox) el.recommendationBox.innerHTML   = '';
+  if (el.resultHeroStudent) el.resultHeroStudent.textContent = '';
+  if (el.resultHeroLevel)   el.resultHeroLevel.textContent   = '';
 
-  if (el.heroConfidence) {
-    el.heroConfidence.classList.remove('warn', 'alert');
-  }
   if (el.semaforoBlock) {
     el.semaforoBlock.classList.remove('verde', 'amarillo', 'rojo', 'default');
   }
@@ -371,7 +349,6 @@ export function resetResultado() {
   hide(el.validationNotice);
   hide(el.recommendationBox);
 }
-
 
 
 /* ══════════════════════════════════════════════
