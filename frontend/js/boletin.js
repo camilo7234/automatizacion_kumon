@@ -14,6 +14,7 @@
    ============================================================ */
 
 
+
 import { MSG, BOLETIN_STATUS }            from './config.js';
 import {
   getBoletin,
@@ -36,6 +37,7 @@ import {
   resetBoletinButtons,
 }                                         from './ui.js';
 
+
 import {
   formatPercent,
   formatMinutes,
@@ -53,6 +55,7 @@ import {
 
 
 
+
 /* ══════════════════════════════════════════════
    UTILIDAD — normalizar Decimal serializado
    BoletinResponse serializa campos Decimal como
@@ -67,12 +70,14 @@ function _toFloat(value) {
 
 
 
+
 /* ══════════════════════════════════════════════
    INIT
    ══════════════════════════════════════════════ */
 export function initBoletin() {
   _bindButtons();
 }
+
 
 
 
@@ -105,6 +110,7 @@ export function renderBoletin(data) {
 }
 
 
+
 /* ══════════════════════════════════════════════
    LOAD DESDE BACKEND
    Llamado desde app.js → _onCuestionarioDone
@@ -131,8 +137,11 @@ export async function loadBoletin(resultId) {
 
 
 
+
 /* ══════════════════════════════════════════════
    BARRA DE ESTADO
+   data.status y data.generated_at existen en la
+   raíz de BoletinResponse — no requieren desestructurar.
    ══════════════════════════════════════════════ */
 function _renderStatusBar(data) {
   if (!el.boletinStatusBar) return;
@@ -151,19 +160,26 @@ function _renderStatusBar(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    HERO — puntaje combinado + semáforo
-   Campos Decimal (puntaje_combinado, percentage)
-   llegan como strings — normalizar con _toFloat.
+   CORRECCIÓN: todos los campos leídos desde
+   data.combinado y data.cuantitativo, no desde
+   la raíz de BoletinResponse donde no existen.
    ══════════════════════════════════════════════ */
 function _renderHero(data) {
+  const combinado    = data.combinado    ?? {};
+  const cuantitativo = data.cuantitativo ?? {};
+
   if (el.boletinHeroScore) {
-    /* puntaje_combinado es el score final; fallback a percentage */
-    const score = _toFloat(data.puntaje_combinado ?? data.percentage);
+    /* puntaje combinado: data.combinado.puntaje
+       fallback a porcentaje bruto: data.cuantitativo.percentage */
+    const score = _toFloat(combinado.puntaje ?? cuantitativo.percentage);
     el.boletinHeroScore.textContent = formatPercent(score, 1);
   }
 
-  const value = data.semaforo ?? '';
+  /* semaforo: data.cuantitativo.semaforo */
+  const value = cuantitativo.semaforo ?? '';
   const tone  = toneForSemaforo(value);
 
   if (el.boletinSemaforoIcon) {
@@ -177,12 +193,16 @@ function _renderHero(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    DOT DE CONFIANZA OCR
-   confidence_score llega como string Decimal.
+   CORRECCIÓN: confidence_score y needs_manual_review
+   están en data.cuantitativo, no en la raíz.
    ══════════════════════════════════════════════ */
 function _renderConfidenceDot(data) {
-  const score    = _toFloat(data.confidence_score);
+  const cuantitativo = data.cuantitativo ?? {};
+
+  const score    = _toFloat(cuantitativo.confidence_score);
   const dotClass = confidenceDotClass(score);
   const label    = confidenceLabel(score);
 
@@ -199,7 +219,7 @@ function _renderConfidenceDot(data) {
   /* Banner de revisión manual inline en el boletín */
   const manualBanner = document.getElementById('boletinManualReviewBanner');
   if (manualBanner) {
-    if (data.needs_manual_review) {
+    if (cuantitativo.needs_manual_review) {
       manualBanner.innerHTML = `
         <span>⚠️</span>
         <span>Confianza OCR baja (${label}).
@@ -214,42 +234,46 @@ function _renderConfidenceDot(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    MÉTRICAS CUANTITATIVAS
-   Campos Decimal normalizados con _toFloat.
+   CORRECCIÓN: todos los campos leídos desde
+   data.cuantitativo, no desde la raíz.
    ══════════════════════════════════════════════ */
 function _renderMetrics(data) {
   if (!el.boletinMetricsGrid) return;
 
+  const cuantitativo = data.cuantitativo ?? {};
+
   const metrics = [
     {
       label: 'Nivel WS',
-      value: data.ws ?? '—',
+      value: cuantitativo.ws ?? '—',
       icon:  '📘',
     },
     {
       label: 'Punto de inicio',
-      value: data.starting_point ?? '—',
+      value: cuantitativo.starting_point ?? '—',
       icon:  '🏁',
     },
     {
       label: 'Porcentaje',
-      value: formatPercent(_toFloat(data.percentage)),
+      value: formatPercent(_toFloat(cuantitativo.percentage)),
       icon:  '📊',
     },
     {
       label: 'Aciertos',
-      value: formatFraction(data.correct_answers, data.total_questions),
+      value: formatFraction(cuantitativo.correct_answers, cuantitativo.total_questions),
       icon:  '✅',
     },
     {
       label: 'Tiempo estudio',
-      value: formatMinutes(_toFloat(data.study_time_min)),
+      value: formatMinutes(_toFloat(cuantitativo.study_time_min)),
       icon:  '⏱',
     },
     {
       label: 'Tiempo objetivo',
-      value: formatMinutes(_toFloat(data.target_time_min)),
+      value: formatMinutes(_toFloat(cuantitativo.target_time_min)),
       icon:  '🎯',
     },
   ];
@@ -265,25 +289,28 @@ function _renderMetrics(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    SECCIONES CUALITATIVAS
-   detalle_secciones: [{ nombre, puntaje, etiqueta }]
-   puntaje por sección y puntaje_cualitativo global
-   son Decimal — normalizar con _toFloat.
+   CORRECCIÓN:
+   - data.detalle_secciones → data.cualitativo.secciones
+   - data.etiqueta_cualitativa → data.cualitativo.etiqueta_total
+   - data.puntaje_cualitativo → data.cualitativo.total_porcentaje
    ══════════════════════════════════════════════ */
 function _renderSections(data) {
   if (!el.boletinSections) return;
 
-  const sections = data.detalle_secciones ?? [];
+  const cualitativo = data.cualitativo ?? {};
+  const sections    = cualitativo.secciones ?? [];
 
   if (!sections.length) {
     /* Fallback: mostrar puntaje y etiqueta global */
-    const { label, type } = etiquetaInfo(data.etiqueta_cualitativa);
+    const { label, type } = etiquetaInfo(cualitativo.etiqueta_total);
     el.boletinSections.innerHTML = `
       <div class="section-row section-summary">
         <span class="section-nombre">Evaluación global</span>
         <span class="section-puntaje">
-          ${formatPercent(_toFloat(data.puntaje_cualitativo))}
+          ${formatPercent(_toFloat(cualitativo.total_porcentaje))}
         </span>
         <span class="tag tag-${type}">${label}</span>
       </div>
@@ -309,104 +336,83 @@ function _renderSections(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    OBSERVACIÓN CUALITATIVA DEL ORIENTADOR
-   Campo real de BoletinResponse: observacion_cualitativa
+   CORRECCIÓN: observacion_cualitativa no existe
+   en BoletinResponse — el campo fue guardado en
+   ObservacionCualitativa y el backend no lo
+   reexpone en este endpoint. Se oculta el bloque.
    ══════════════════════════════════════════════ */
 function _renderObservacion(data) {
   if (!el.boletinObservacion) return;
-
-  /* observacion_cualitativa es el campo real de BoletinResponse */
-  const text = data.observacion_cualitativa ?? null;
-
-  if (!text) {
-    hide(el.boletinObservacion);
-    return;
-  }
-
-  el.boletinObservacion.innerHTML = `
-    <p class="observacion-label">💬 Observación del orientador</p>
-    <p class="observacion-text">${_escapeHtml(text)}</p>
-  `;
-  show(el.boletinObservacion);
+  hide(el.boletinObservacion);
 }
+
 
 
 
 /* ══════════════════════════════════════════════
    PANEL DE CORRECCIONES
-   Permite corregir valores cuantitativos y la
-   observación antes o después de generar el PDF.
-   Usa PATCH /api/v1/boletin/{resultId}
-   Campo observación: observacion_cualitativa
-   (alineado con BoletinPatchRequest)
+   CORRECCIÓN:
+   - Todos los values leídos desde data.cuantitativo
+   - Campo observacion_cualitativa eliminado: no
+     existe en BoletinResponse ni en BoletinPatchRequest
+     según el schema del backend. El PATCH solo
+     acepta campos de data.cuantitativo.
    ══════════════════════════════════════════════ */
 function _renderCorrectionPanel(data) {
   if (!el.correctionGrid) return;
 
+  const cuantitativo = data.cuantitativo ?? {};
+
   const fields = [
     {
-      key:         'ws',
+      key:         'cuantitativo.ws',
       label:       'Nivel WS',
       type:        'text',
-      value:       data.ws ?? '',
+      value:       cuantitativo.ws ?? '',
       placeholder: 'Ej: 5A',
     },
     {
-      key:         'correct_answers',
+      key:         'cuantitativo.correct_answers',
       label:       'Respuestas correctas',
       type:        'number',
-      value:       data.correct_answers ?? '',
+      value:       cuantitativo.correct_answers ?? '',
       placeholder: 'Ej: 18',
       min:         0,
     },
     {
-      key:         'total_questions',
+      key:         'cuantitativo.total_questions',
       label:       'Total preguntas',
       type:        'number',
-      value:       data.total_questions ?? '',
+      value:       cuantitativo.total_questions ?? '',
       placeholder: 'Ej: 20',
       min:         1,
     },
     {
-      key:         'study_time_min',
+      key:         'cuantitativo.study_time_min',
       label:       'Tiempo estudio (min)',
       type:        'number',
-      value:       _toFloat(data.study_time_min) ?? '',
+      value:       _toFloat(cuantitativo.study_time_min) ?? '',
       placeholder: 'Ej: 45',
       min:         0,
-    },
-    {
-      /* observacion_cualitativa — alineado con BoletinPatchRequest */
-      key:         'observacion_cualitativa',
-      label:       'Observación del orientador',
-      type:        'textarea',
-      value:       data.observacion_cualitativa ?? '',
-      placeholder: 'Escribe una observación adicional...',
     },
   ];
 
   el.correctionGrid.innerHTML = fields.map(f => {
-    const inputHtml = f.type === 'textarea'
-      ? `<textarea
-           id="corr_${f.key}"
-           data-key="${f.key}"
-           class="form-textarea correction-input"
-           rows="2"
-           placeholder="${_escapeAttr(f.placeholder)}"
-         >${_escapeHtml(String(f.value))}</textarea>`
-      : `<input
-           type="${f.type}"
-           id="corr_${f.key}"
-           data-key="${f.key}"
-           class="form-input correction-input"
-           value="${_escapeAttr(String(f.value))}"
-           placeholder="${_escapeAttr(f.placeholder)}"
-           ${f.min !== undefined ? `min="${f.min}"` : ''}>`;
+    const inputHtml = `<input
+         type="${f.type}"
+         id="corr_${f.key.replace('.', '_')}"
+         data-key="${f.key}"
+         class="form-input correction-input"
+         value="${_escapeAttr(String(f.value))}"
+         placeholder="${_escapeAttr(f.placeholder)}"
+         ${f.min !== undefined ? `min="${f.min}"` : ''}>`;
 
     return `
       <div class="correction-field">
-        <label class="correction-label" for="corr_${f.key}">
+        <label class="correction-label" for="corr_${f.key.replace('.', '_')}">
           ${f.label}
         </label>
         ${inputHtml}
@@ -417,8 +423,15 @@ function _renderCorrectionPanel(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    GUARDAR CORRECCIONES — submit del panel
+   CORRECCIÓN:
+   - Los keys ahora son dot-notation: "cuantitativo.ws"
+     alineados con BoletinPatchRequest.campo
+   - La comparación del valor original se hace
+     contra data.cuantitativo[shortKey], no contra
+     la raíz de getBoletinData()
    ══════════════════════════════════════════════ */
 async function _handleSaveCorrections() {
   const resultId = resolveResultId();
@@ -430,28 +443,33 @@ async function _handleSaveCorrections() {
   const inputs  = el.correctionGrid
     ?.querySelectorAll('.correction-input') ?? [];
   const current = getBoletinData() ?? {};
+  const currentCuan = current.cuantitativo ?? {};
 
   const numericKeys = [
-    'correct_answers', 'total_questions',
-    'study_time_min',  'target_time_min',
+    'cuantitativo.correct_answers',
+    'cuantitativo.total_questions',
+    'cuantitativo.study_time_min',
+    'cuantitativo.target_time_min',
   ];
 
   /* Construir array de correcciones con estructura auditada por el backend:
      { campo, valor_original, valor_nuevo, motivo }
+     campo usa dot-notation: "cuantitativo.ws"
      Solo se incluyen campos que realmente cambiaron. */
   const correcciones = [];
 
   inputs.forEach(inp => {
-    const key      = inp.dataset.key;
+    const key      = inp.dataset.key;           // "cuantitativo.ws"
     const rawValue = inp.value.trim();
+    const shortKey = key.split('.').pop();      // "ws"
 
     const valor_nuevo = numericKeys.includes(key) && rawValue !== ''
       ? Number(rawValue)
       : rawValue || null;
 
     const currentNorm = numericKeys.includes(key)
-      ? _toFloat(current[key])
-      : (current[key] ?? null);
+      ? _toFloat(currentCuan[shortKey])
+      : (currentCuan[shortKey] ?? null);
 
     if (String(valor_nuevo ?? '') !== String(currentNorm ?? '')) {
       correcciones.push({
@@ -497,9 +515,10 @@ async function _handleSaveCorrections() {
 
   setAlert(el.boletinAlert, MSG.BOLETIN_PATCH_SUCCESS, 'success');
   setPdfDownloadEnabled(true);      // ← habilitar PDF tras PATCH exitoso
-  hide(el.confirmBoletinBtn);     // ← ocultar "Confirmar sin cambios" — ya no aplica
+  hide(el.confirmBoletinBtn);       // ← ocultar "Confirmar sin cambios" — ya no aplica
   renderBoletin(data);
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -527,7 +546,7 @@ function _bindButtons() {
     setAlert(el.boletinAlert, 'Boletín confirmado. Ya puedes descargar el PDF.', 'success');
   });
 
-  /* Descargar PDF — nombre del archivo desde nombre_sujeto */
+  /* Descargar PDF — nombre del archivo desde cuantitativo.nombre_sujeto */
   el.downloadPdfBtn?.addEventListener('click', () => {
     const resultId = resolveResultId();
     if (!resultId) {
@@ -535,10 +554,12 @@ function _bindButtons() {
       return;
     }
     const boletin = getBoletinData();
-    const name    = boletin?.nombre_sujeto?.trim() || 'estudiante';
+    /* CORRECCIÓN: nombre_sujeto está en data.cuantitativo, no en la raíz */
+    const name    = boletin?.cuantitativo?.nombre_sujeto?.trim() || 'estudiante';
     downloadBoletinPdf(resultId, name);
   });
 }
+
 
 
 /* ══════════════════════════════════════════════
@@ -568,6 +589,7 @@ export function resetBoletin() {
      para el estado inicial de los tres botones */
   resetBoletinButtons();
 }
+
 
 
 /* ══════════════════════════════════════════════

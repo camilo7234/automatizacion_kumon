@@ -20,9 +20,6 @@ from pydantic import BaseModel, UUID4, Field, field_validator
 
 
 # ── GET /api/v1/cuestionario/{result_id} ─────────────────────────
-
-
-
 class CuestionarioResponse(BaseModel):
     """
     Devuelve el formulario cualitativo con la estructura declarativa
@@ -30,8 +27,17 @@ class CuestionarioResponse(BaseModel):
 
     - cuestionario: dict con escala, secciones, prefills y auto_flags.
     - prefill_flags: lista de claves detectadas automáticamente.
-    """
 
+    CORRECCIÓN: se agregan los campos de display que el frontend
+    necesita para el header, el footer y el flujo automático del boletín:
+      - nombre_sujeto:      mostrar el nombre en el header del cuestionario.
+      - boletin_habilitado: controlar si se dispara loadBoletin() automáticamente
+                            cuando ya_completado === true (re-visita).
+      - completado_por:     prerellenar el campo del footer en modo lectura.
+      - completado_at:      mostrar la fecha en el tooltip del tag.
+      - respuestas_guardadas: prerellenar las respuestas en modo lectura.
+      - questions:          array plano de preguntas listo para renderizar.
+    """
 
     result_id: UUID4
     subject: str
@@ -46,9 +52,15 @@ class CuestionarioResponse(BaseModel):
         description="Claves de métricas ya capturadas automáticamente por el sistema",
     )
 
+    # ── Campos de display agregados ──────────────────────────────
+    nombre_sujeto:        Optional[str]          = None
+    boletin_habilitado:   bool                   = True
+    completado_por:       Optional[str]          = None
+    completado_at:        Optional[datetime]     = None
+    respuestas_guardadas: Dict[str, Any]         = Field(default_factory=dict)
+    questions:            List[Dict[str, Any]]   = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
-
 
 
 # ── POST /api/v1/cuestionario/{result_id} — Request ──────────────

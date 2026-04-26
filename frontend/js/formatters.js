@@ -9,6 +9,7 @@
    ============================================================ */
 
 
+
 import {
   JOB_STATUS,
   BOLETIN_STATUS,
@@ -20,9 +21,11 @@ import {
 
 
 
+
 /* ══════════════════════════════════════════════
    NÚMEROS
    ══════════════════════════════════════════════ */
+
 
 
 /**
@@ -40,6 +43,7 @@ export function formatPercent(value, decimals = 1) {
 }
 
 
+
 /**
  * Formatea un número decimal con precisión configurable.
  * formatDecimal(3.14159, 2) → "3.14"
@@ -51,6 +55,7 @@ export function formatDecimal(value, decimals = 2) {
   if (isNaN(n)) return '—';
   return n.toFixed(decimals);
 }
+
 
 
 /**
@@ -65,22 +70,42 @@ export function formatInt(value) {
 }
 
 
+
 /**
- * Formatea minutos como "Xm" o "Xh Ym".
- * Acepta tanto number como string numérico.
+ * Formatea minutos como "Xm", "X.Ym" o "Xh Ym".
+ * Preserva el decimal si es significativo (≥ 0.05).
+ * Acepta tanto number como string numérico (Decimal serializado).
  * formatMinutes(90)     → "1h 30m"
  * formatMinutes("45.0") → "45m"
+ * formatMinutes(14.4)   → "14.4m"
  * formatMinutes(0)      → "0m"
+ * formatMinutes(null)   → "—"
+ *
+ * CORRECCIÓN: se eliminó Math.round() que truncaba 14.4 → 14.
+ * Se preserva un decimal cuando la parte fraccionaria es ≥ 0.05,
+ * para que valores como 14.4 se muestren como "14.4m" y valores
+ * como 45.0 o 45.02 se muestren como "45m" sin decimal espurio.
  */
 export function formatMinutes(minutes) {
   if (minutes === null || minutes === undefined) return '—';
-  const m = Math.round(Number(minutes));
-  if (isNaN(m)) return '—';
-  if (m < 60) return `${m}m`;
-  const h   = Math.floor(m / 60);
-  const rem = m % 60;
+  const n = Number(minutes);
+  if (isNaN(n)) return '—';
+
+  const hasFraction = Math.abs(n - Math.round(n)) >= 0.05;
+
+  if (n < 60) {
+    return hasFraction ? `${n.toFixed(1)}m` : `${Math.round(n)}m`;
+  }
+
+  /* Para valores ≥ 60 min se trabaja en enteros porque los decimales
+     de horas y minutos restantes no tienen significado práctico
+     en el contexto de tiempo de estudio Kumon. */
+  const totalMin = Math.round(n);
+  const h        = Math.floor(totalMin / 60);
+  const rem      = totalMin % 60;
   return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
 }
+
 
 
 /**
@@ -95,9 +120,11 @@ export function formatFraction(correct, total) {
 
 
 
+
 /* ══════════════════════════════════════════════
    FECHAS
    ══════════════════════════════════════════════ */
+
 
 
 /**
@@ -121,6 +148,7 @@ export function formatDate(isoString) {
 }
 
 
+
 /**
  * Solo la hora.
  * formatTime("2026-04-24T17:30:00Z") → "12:30"
@@ -139,9 +167,11 @@ export function formatTime(isoString) {
 
 
 
+
 /* ══════════════════════════════════════════════
    TEXTO
    ══════════════════════════════════════════════ */
+
 
 
 /**
@@ -152,6 +182,7 @@ export function titleCase(str) {
   if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
 }
+
 
 
 /**
@@ -165,6 +196,7 @@ export function snakeToWords(str) {
     .map(w => titleCase(w))
     .join(' ');
 }
+
 
 
 
@@ -183,6 +215,7 @@ const JOB_STATUS_LABEL = {
 };
 
 
+
 /**
  * prettyStatus("processing")    → "Procesando"
  * prettyStatus("manual_review") → "Revisión manual"
@@ -190,6 +223,7 @@ const JOB_STATUS_LABEL = {
 export function prettyStatus(status) {
   return JOB_STATUS_LABEL[status] ?? snakeToWords(status ?? '—');
 }
+
 
 
 /**
@@ -210,6 +244,7 @@ export function tagTypeForStatus(status) {
 }
 
 
+
 /**
  * Label del progreso según el status y porcentaje.
  * prettyProgressLabel("processing", 65) → "Procesando — 65%"
@@ -228,9 +263,11 @@ export function prettyProgressLabel(status, pct) {
 
 
 
+
 /* ══════════════════════════════════════════════
    SEMÁFORO
    ══════════════════════════════════════════════ */
+
 
 
 /**
@@ -242,6 +279,7 @@ export function semaforoEmoji(value) {
 }
 
 
+
 /**
  * Label legible del semáforo.
  * semaforoLabelText("rojo") → "Necesita refuerzo"
@@ -249,6 +287,7 @@ export function semaforoEmoji(value) {
 export function semaforoLabelText(value) {
   return SEMAFORO_LABEL[value] ?? '—';
 }
+
 
 
 /**
@@ -263,9 +302,11 @@ export function toneForSemaforo(value) {
 
 
 
+
 /* ══════════════════════════════════════════════
    CONFIANZA OCR (confidence_score: float 0.0–1.0)
    ══════════════════════════════════════════════ */
+
 
 
 /**
@@ -284,6 +325,7 @@ export function confidenceDotClass(score) {
 }
 
 
+
 /**
  * Label de confianza legible.
  * confidenceLabel(0.92) → "92% confianza"
@@ -296,9 +338,11 @@ export function confidenceLabel(score) {
 
 
 
+
 /* ══════════════════════════════════════════════
    BOLETÍN STATUS
    ══════════════════════════════════════════════ */
+
 
 
 /**
@@ -313,6 +357,7 @@ export function boletinStatusClass(status) {
   };
   return map[status] ?? 'pending';
 }
+
 
 
 /**
@@ -330,6 +375,7 @@ export function boletinStatusLabel(status) {
 
 
 
+
 /* ══════════════════════════════════════════════
    ETIQUETA CUALITATIVA
    Mapea etiqueta_cualitativa del backend a un
@@ -343,6 +389,7 @@ const ETIQUETA_MAP = {
   logrado:      { label: 'Logrado',             type: 'success' },
   no_evaluado:  { label: 'No evaluado',         type: 'default' },
 };
+
 
 
 /**

@@ -77,6 +77,41 @@ def _get_qualitative_result(db: Session, result: TestResult):
     )
 
 
+def _build_questions(cuestionario: dict) -> list:
+    """
+    Convierte la estructura interna del cuestionario
+    { secciones: [ { id, titulo, items: [ { id, texto, ... } ] } ] }
+    en un array plano de preguntas listo para el frontend:
+    [ { id, label, type, options, section_id, section_title, ... } ]
+    """
+    questions = []
+    escala = cuestionario.get("escala", {})
+    opciones_escala = [
+        {"value": v, "label": escala.get("labels", {}).get(v, str(v))}
+        for v in range(
+            int(escala.get("min", 1)),
+            int(escala.get("max", 5)) + 1,
+        )
+    ]
+
+    for seccion in cuestionario.get("secciones", []):
+        for item in seccion.get("items", []):
+            questions.append({
+                "id":               item["id"],
+                "label":            item.get("texto", item["id"]),
+                "type":             "radio",
+                "options":          opciones_escala,
+                "required":         True,
+                "section_id":       seccion["id"],
+                "section_title":    seccion.get("titulo", ""),
+                "prefill_valor":    item.get("prefill_valor"),
+                "prefill_fuente":   item.get("prefill_fuente"),
+                "prefill_confianza": item.get("prefill_confianza"),
+            })
+
+    return questions
+
+
 def _obs_to_prefills(respuestas: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
     prefills: dict[str, dict[str, Any]] = {}
     if not respuestas:
@@ -196,6 +231,36 @@ def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
             test_code=template.code,
         )
 
+    # ── Resolver nombre del sujeto ───────────────────────────────
+    # Misma lógica que get_boletin — fuente única para ambos endpoints.
+    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
+    nombre_sujeto = ""
+    for obj in [
+        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
+        else getattr(result, "estudiante", None),
+        getattr(result, "prospecto", None),
+        getattr(result, "estudiante", None),
+    ]:
+        if obj is None:
+            continue
+        for attr in ("nombre_completo", "full_name", "display_name", "name"):
+            val = getattr(obj, attr, None)
+            if val:
+                nombre_sujeto = str(val)
+                break
+        if not nombre_sujeto:
+            p = getattr(obj, "primer_nombre", None)
+            a = getattr(obj, "primer_apellido", None)
+            if p or a:
+                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
+        if nombre_sujeto:
+            break
+
+    # ── Respuestas guardadas — aplanadas para que el frontend
+    # pueda prerellenar los inputs en modo lectura directamente
+    # con { [pregunta_id]: valor_int }
+    respuestas_guardadas = _flatten_respuestas(obs.respuestas) if obs else {}
+
     return CuestionarioResponse(
         result_id=result.id_result,
         subject=template.subject,
@@ -204,8 +269,16 @@ def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
         ya_completado=bool(obs and obs.esta_completo),
         tiene_prefills=tiene_prefills,
         prefill_flags=prefill_flags,
+        # ── Campos de display agregados ──────────────────────────
+        nombre_sujeto=nombre_sujeto or None,
+        boletin_habilitado=bool(obs and obs.esta_completo),
+        completado_por=obs.completado_por if obs else None,
+        completado_at=obs.completado_at if obs else None,
+        respuestas_guardadas=respuestas_guardadas,
+        # ── Array plano para el frontend ───────────────────────
+        questions=_build_questions(cuestionario),
+        
     )
-
 
 # ──────────────────────────────────────────────────────────────
 # POST /cuestionario/{result_id}
