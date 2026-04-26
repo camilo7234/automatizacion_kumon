@@ -32,7 +32,10 @@ import {
   show,
   hide,
   setBoletinActionsEnabled,
+  setPdfDownloadEnabled,
+  resetBoletinButtons,
 }                                         from './ui.js';
+
 import {
   formatPercent,
   formatMinutes,
@@ -94,9 +97,12 @@ export function renderBoletin(data) {
   _renderCorrectionPanel(data);
 
   show(el.boletinContent);
-  setBoletinActionsEnabled(true);
-}
 
+  /* Habilitar correcciones y confirmar — PDF bloqueado hasta
+     que el orientador confirme o guarde correcciones */
+  setBoletinActionsEnabled(true);
+  setPdfDownloadEnabled(false);
+}
 
 
 /* ══════════════════════════════════════════════
@@ -425,43 +431,55 @@ async function _handleSaveCorrections() {
     ?.querySelectorAll('.correction-input') ?? [];
   const current = getBoletinData() ?? {};
 
-  const corrections = {};
   const numericKeys = [
     'correct_answers', 'total_questions',
     'study_time_min',  'target_time_min',
   ];
 
+  /* Construir array de correcciones con estructura auditada por el backend:
+     { campo, valor_original, valor_nuevo, motivo }
+     Solo se incluyen campos que realmente cambiaron. */
+  const correcciones = [];
+
   inputs.forEach(inp => {
     const key      = inp.dataset.key;
     const rawValue = inp.value.trim();
 
-    const value = numericKeys.includes(key) && rawValue !== ''
+    const valor_nuevo = numericKeys.includes(key) && rawValue !== ''
       ? Number(rawValue)
       : rawValue || null;
 
-    /* Para comparación normalizar el valor actual también
-       (puede ser string Decimal del backend) */
     const currentNorm = numericKeys.includes(key)
       ? _toFloat(current[key])
       : (current[key] ?? null);
 
-    /* Solo incluir en el payload si el valor cambió */
-    if (String(value ?? '') !== String(currentNorm ?? '')) {
-      corrections[key] = value;
+    if (String(valor_nuevo ?? '') !== String(currentNorm ?? '')) {
+      correcciones.push({
+        campo:          key,
+        valor_original: currentNorm,
+        valor_nuevo,
+        motivo:         null,
+      });
     }
   });
 
-  if (!Object.keys(corrections).length) {
+  if (!correcciones.length) {
     setAlert(el.boletinAlert, 'No hay cambios para guardar.', 'info');
     return;
   }
+
+  /* corregido_por: reutilizar el nombre que el orientador ya ingresó
+     en el cuestionario — fuente única de verdad en el DOM */
+  const corregido_por =
+    document.getElementById('completadoPorInput')?.value?.trim() || 'Orientador';
 
   if (el.saveCorrectionBtn) {
     el.saveCorrectionBtn.disabled    = true;
     el.saveCorrectionBtn.textContent = 'Guardando...';
   }
 
-  const { ok, data, error } = await patchBoletin(resultId, corrections);
+  const payload = { correcciones, corregido_por };
+  const { ok, data, error } = await patchBoletin(resultId, payload);
 
   if (el.saveCorrectionBtn) {
     el.saveCorrectionBtn.disabled    = false;
@@ -478,9 +496,10 @@ async function _handleSaveCorrections() {
   }
 
   setAlert(el.boletinAlert, MSG.BOLETIN_PATCH_SUCCESS, 'success');
+  setPdfDownloadEnabled(true);      // ← habilitar PDF tras PATCH exitoso
+  hide(el.confirmBoletinBtn);     // ← ocultar "Confirmar sin cambios" — ya no aplica
   renderBoletin(data);
 }
-
 
 
 /* ══════════════════════════════════════════════
@@ -501,6 +520,13 @@ function _bindButtons() {
   /* Guardar correcciones */
   el.saveCorrectionBtn?.addEventListener('click', _handleSaveCorrections);
 
+  /* Confirmar sin cambios — habilita el PDF sin hacer PATCH */
+  el.confirmBoletinBtn?.addEventListener('click', () => {
+    setPdfDownloadEnabled(true);
+    hide(el.confirmBoletinBtn);
+    setAlert(el.boletinAlert, 'Boletín confirmado. Ya puedes descargar el PDF.', 'success');
+  });
+
   /* Descargar PDF — nombre del archivo desde nombre_sujeto */
   el.downloadPdfBtn?.addEventListener('click', () => {
     const resultId = resolveResultId();
@@ -509,12 +535,10 @@ function _bindButtons() {
       return;
     }
     const boletin = getBoletinData();
-    /* nombre_sujeto es el campo real de BoletinResponse */
     const name    = boletin?.nombre_sujeto?.trim() || 'estudiante';
     downloadBoletinPdf(resultId, name);
   });
 }
-
 
 
 /* ══════════════════════════════════════════════
@@ -534,17 +558,16 @@ export function resetBoletin() {
   if (el.boletinSemaforoLabel) {
     el.boletinSemaforoLabel.className = 'semaforo-label';
   }
-  if (el.openBoletinBtn) {
-    el.openBoletinBtn.textContent = '✏️ Corregir valores';
-  }
 
   clearAlert(el.boletinAlert);
   hide(el.correctionPanel);
   hide(el.boletinContent);
   hide(el.boletinSection);
-  setBoletinActionsEnabled(false);
-}
 
+  /* resetBoletinButtons es la única fuente de verdad
+     para el estado inicial de los tres botones */
+  resetBoletinButtons();
+}
 
 
 /* ══════════════════════════════════════════════

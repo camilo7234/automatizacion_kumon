@@ -93,8 +93,8 @@ function _onUploadDone(jobId) {
  * job.status === "done" y hay un result_id.
  * Carga y renderiza el resultado del video.
  */
-function _onJobDone(resultId) {
-  loadResultado(resultId);
+function _onJobDone(jobId) {
+  loadResultado(jobId);
 }
 
 

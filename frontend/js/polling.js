@@ -254,7 +254,7 @@ async function _tick() {
     }
 
     setResultId(resultId);
-    _onJobDone?.(resultId);
+    _onJobDone?.(_jobId);
     return;
   }
 

@@ -183,12 +183,14 @@
 
 .form-row {
   display:               grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap:                   var(--space-4);
 }
 
-@media (max-width: 560px) {
-  .form-row { grid-template-columns: 1fr; }
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .form-actions {
@@ -199,9 +201,16 @@
   padding-top:     var(--space-4);
 }
 
-@media (max-width: 480px) {
-  .form-actions { flex-direction: column; align-items: stretch; }
-  .form-actions .btn { width: 100%; justify-content: center; }
+@media (max-width: 768px) {
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 
@@ -284,31 +293,34 @@
    ══════════════════════════════════════════════ */
 .kpi-grid {
   display:               grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap:                   var(--space-3);
 }
 
-@media (max-width: 700px) {
-  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 1024px) {
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
-@media (max-width: 380px) {
-  .kpi-grid { grid-template-columns: 1fr 1fr; }
+@media (max-width: 520px) {
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .kpi-card {
   display:        flex;
   flex-direction: column;
   align-items:    center;
-  gap:            var(--space-1);
-  padding:        var(--space-4) var(--space-3);
+  gap:            var(--space-2);
+  padding:        var(--space-4);
   background:     var(--surface-2);
   border:         1px solid var(--line);
   border-radius:  var(--radius-md);
   text-align:     center;
   transition:     box-shadow var(--transition);
 }
-
 .kpi-icon {
   font-size:   1.4rem;
   line-height: 1;
@@ -363,13 +375,14 @@
 
 .detail-row {
   display:         grid;
-  grid-template-columns: minmax(120px, 35%) 1fr;
+  grid-template-columns: minmax(140px, 32%) 1fr;
   align-items:     start;
   gap:             var(--space-3);
   padding:         var(--space-2) var(--space-4);
   background:      var(--surface);
   border-bottom:   1px solid var(--line);
   transition:      background var(--transition);
+  word-break:      break-word;
 }
 
 .detail-row:last-child  { border-bottom: none; }

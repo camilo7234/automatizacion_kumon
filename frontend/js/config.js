@@ -101,7 +101,7 @@ export const JOB_ACTIVE_STATES = new Set([
    ══════════════════════════════════════════════ */
 export const BOLETIN_STATUS = {
   PENDING:   'pending',
-  GENERATED: 'generated',   // valor real del backend
+  GENERATED: 'ready',                    // valor real del backend
   CORREGIDO: 'corregido_por_orientador',
 };
 

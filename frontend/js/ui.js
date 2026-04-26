@@ -96,7 +96,8 @@ export const el = {
   boletinObservacion:   null,  // #boletinObservacion
   boletinConfidenceDot: null,  // #boletinConfidenceDot
   boletinConfidencePct: null,  // #boletinConfidencePct
-  openBoletinBtn:       null,  // #openBoletinBtn        (abrir visor inline)
+  openBoletinBtn:       null,  // #openBoletinBtn
+  confirmBoletinBtn:    null,  // #confirmBoletinBtn     (confirmar sin cambios → habilita PDF)
   downloadPdfBtn:       null,  // #downloadPdfBtn
   correctionPanel:      null,  // #correctionPanel
   correctionGrid:       null,  // #correctionGrid
@@ -186,6 +187,7 @@ export function initEl() {
   el.boletinConfidenceDot = get('boletinConfidenceDot');
   el.boletinConfidencePct = get('boletinConfidencePct');
   el.openBoletinBtn       = get('openBoletinBtn');
+  el.confirmBoletinBtn    = get('confirmBoletinBtn');
   el.downloadPdfBtn       = get('downloadPdfBtn');
   el.correctionPanel      = get('correctionPanel');
   el.correctionGrid       = get('correctionGrid');
@@ -303,15 +305,43 @@ export function setProgress(fill, pctEl, value) {
 
 /* ══════════════════════════════════════════════
    BOTONES DEL BOLETÍN
-   Habilita/deshabilita los botones de acción
-   según si el boletín ya existe.
+   Separados en tres funciones independientes:
+   - setBoletinActionsEnabled: habilita botón de
+     correcciones cuando el boletín cargó.
+   - setPdfDownloadEnabled: habilita PDF solo tras
+     confirmar o guardar correcciones.
+   - resetBoletinButtons: restaura todo al estado
+     inicial para una nueva sesión.
    ══════════════════════════════════════════════ */
 export function setBoletinActionsEnabled(enabled) {
-  if (el.openBoletinBtn)  el.openBoletinBtn.disabled  = !enabled;
-  if (el.downloadPdfBtn)  el.downloadPdfBtn.disabled  = !enabled;
+  if (el.openBoletinBtn)   el.openBoletinBtn.disabled   = !enabled;
+  if (el.confirmBoletinBtn) {
+    el.confirmBoletinBtn.disabled = !enabled;
+    /* Mostrar el botón de confirmar cuando se habilita,
+       ocultarlo cuando se deshabilita (reset) */
+    enabled
+      ? el.confirmBoletinBtn.classList.remove('hidden')
+      : el.confirmBoletinBtn.classList.add('hidden');
+  }
 }
 
+export function setPdfDownloadEnabled(enabled) {
+  if (el.downloadPdfBtn) el.downloadPdfBtn.disabled = !enabled;
+}
 
+export function resetBoletinButtons() {
+  if (el.openBoletinBtn) {
+    el.openBoletinBtn.disabled    = true;
+    el.openBoletinBtn.textContent = '✏️ Corregir valores';
+  }
+  if (el.confirmBoletinBtn) {
+    el.confirmBoletinBtn.disabled = true;
+    el.confirmBoletinBtn.classList.remove('hidden');
+  }
+  if (el.downloadPdfBtn) {
+    el.downloadPdfBtn.disabled = true;
+  }
+}
 
 /* ══════════════════════════════════════════════
    CUESTIONARIO SUBMIT BUTTON

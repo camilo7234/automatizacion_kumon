@@ -443,7 +443,7 @@
       <!-- Acciones del boletín -->
       <div class="boletin-actions">
 
-        <!-- Abre/cierra el panel de correcciones (no es "ver boletín") -->
+        <!-- Abre/cierra el panel de correcciones -->
         <button id="openBoletinBtn" class="btn btn-secondary"
                 type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -460,6 +460,17 @@
           ✏️ Corregir valores
         </button>
 
+        <!-- Confirmar sin cambios — habilita el PDF sin hacer PATCH -->
+        <button id="confirmBoletinBtn" class="btn btn-secondary"
+                type="button" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" aria-hidden="true" width="18" height="18">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M4.5 12.75l6 6 9-13.5"/>
+          </svg>
+          ✅ Confirmar sin cambios
+        </button>
+
         <button id="downloadPdfBtn" class="btn btn-primary"
                 type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -473,7 +484,6 @@
         </button>
 
       </div>
-
     </section>
 
 
