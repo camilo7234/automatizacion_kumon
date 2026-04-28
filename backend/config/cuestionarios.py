@@ -1686,6 +1686,43 @@ if ("matematicas", "M4") in CUESTIONARIOS and ("matematicas", "H") not in CUESTI
 # API pública
 # ──────────────────────────────────────────────────────────────
 
+# ══════════════════════════════════════════════════════════════════
+# MAPEO: MÉTRICA DE VIDEO → ITEM_IDS  (nivel de módulo — exportable)
+# ══════════════════════════════════════════════════════════════════
+METRICA_A_ITEMS: Dict[str, List[str]] = {
+    "pausas_largas": [
+        "mantiene_ritmo", "sin_pausas_largas", "mantiene_concentracion",
+        "concentracion", "mantiene_foco", "controla_tiempo",
+        "planifica_tiempo", "no_abandona", "mantiene_constancia",
+        "persistencia", "mantiene_esfuerzo", "trabaja_sin_distracciones",
+        "fluidez_calculo",
+    ],
+    "ritmo_trabajo": [
+        "mantiene_ritmo", "termina_tareas", "termina_con_calma",
+        "tipo_ejercicio_lento", "organiza_trabajo", "fluidez_calculo",
+        "responde_rapido", "responde_inmediato", "responde_con_agilidad",
+        "estrategia_calculo",
+    ],
+    "num_reescrituras": [
+        "organiza_trabajo", "calculo_mental", "mental_rapido",
+        "escribe_respuesta_con_facilidad",
+        "responde_con_rapidez_razonable",
+        "fluidez_alta", "responde_con_facilidad",
+        "escribe_con_mayor_fluidez", "detecta_patrones",
+        "division_2dig",
+    ],
+    "actividad_general": [
+        "motivacion", "motivacion_independencia",
+        "motivacion_autonomia", "motivacion_trabajo",
+        "motivacion_constancia", "trabaja_con_autonomia",
+        "trabaja_con_iniciativa", "trabaja_con_independencia",
+        "trabajo_autonomo_serio", "autonomia_en_prueba",
+        "organiza_trabajo", "asume_reto",
+        "toma_iniciativa", "confianza_responder",
+        "independencia", "afronta_retos",
+    ],
+}
+
 
 def obtener_cuestionario(subject: str, test_code: str) -> Dict[str, Any]:
     subject, test_code = _normalizar_subject_test_code(subject, test_code)
@@ -1724,64 +1761,22 @@ def obtener_cuestionario_con_prefill(
     prefills = prefills or {}
     auto_flags = auto_flags or []
 
-    # ══════════════════════════════════════════════════════════════════
-    # MAPEO: MÉTRICA DE VIDEO → ITEM_IDS
-    # ══════════════════════════════════════════════════════════════════
-    METRICA_A_ITEMS = {
-        "pausas_largas": [
-            "mantiene_ritmo", "sin_pausas_largas", "mantiene_concentracion",
-            "concentracion", "mantiene_foco", "controla_tiempo",
-            "planifica_tiempo", "no_abandona", "mantiene_constancia",
-            "persistencia", "mantiene_esfuerzo", "trabaja_sin_distracciones",
-            "fluidez_calculo",
-        ],
-        "ritmo_trabajo": [
-            "mantiene_ritmo", "termina_tareas", "termina_con_calma",
-            "tipo_ejercicio_lento", "organiza_trabajo", "fluidez_calculo",
-            "responde_rapido", "responde_inmediato", "responde_con_agilidad",
-            "estrategia_calculo",
-        ],
-        "num_reescrituras": [
-            "organiza_trabajo", "calculo_mental", "mental_rapido",
-            "escribe_respuesta_con_facilidad",
-            "responde_con_rapidez_razonable",
-            "fluidez_alta", "responde_con_facilidad",
-            "escribe_con_mayor_fluidez", "detecta_patrones",
-            "division_2dig",
-        ],
-        "actividad_general": [
-            "motivacion", "motivacion_independencia",
-            "motivacion_autonomia", "motivacion_trabajo",
-            "motivacion_constancia", "trabaja_con_autonomia",
-            "trabaja_con_iniciativa", "trabaja_con_independencia",
-            "trabajo_autonomo_serio", "autonomia_en_prueba",
-            "organiza_trabajo", "asume_reto",
-            "toma_iniciativa", "confianza_responder",
-            "independencia", "afronta_retos",
-        ],
-    }
-
     # Invertir el mapeo: item_id → métricas relacionadas
-    ITEM_A_METRICAS = {}
+    ITEM_A_METRICAS: Dict[str, List[str]] = {}
     for metrica, items in METRICA_A_ITEMS.items():
         for item in items:
             ITEM_A_METRICAS.setdefault(item, []).append(metrica)
 
-
     UMBRAL_CONFIANZA = 0.65
 
-
     secciones_filtradas = []
-
 
     for seccion in cuestionario.get("secciones", []):
         seccion_id = seccion.get("id")
         items_filtrados = []
 
-
         for item in seccion.get("items", []):
             item_id = item.get("id")
-
 
             # ════════════════════════════════════════════════════════
             # PREFILL DIRECTO DEL ITEM
@@ -1798,7 +1793,6 @@ def obtener_cuestionario_con_prefill(
                 items_filtrados.append(item)
                 continue
 
-
             # ════════════════════════════════════════════════════════
             # REGLA 1 — ALWAYS_MANUAL (postura)
             # ════════════════════════════════════════════════════════
@@ -1806,9 +1800,7 @@ def obtener_cuestionario_con_prefill(
                 items_filtrados.append(item)
                 continue
 
-
             metricas = ITEM_A_METRICAS.get(item_id, [])
-
 
             # ════════════════════════════════════════════════════════
             # REGLA 4 — SIN MÉTRICA (mostrar siempre)
@@ -1817,13 +1809,11 @@ def obtener_cuestionario_con_prefill(
                 items_filtrados.append(item)
                 continue
 
-
             prefills_metricas = []
             for metrica in metricas:
                 prefill_metrica = prefills.get(metrica)
                 if prefill_metrica and isinstance(prefill_metrica, dict):
                     prefills_metricas.append((metrica, prefill_metrica))
-
 
             # ════════════════════════════════════════════════════════
             # REGLA 2 — AUTO_CAPTURED (omitir si TODAS las métricas
@@ -1833,11 +1823,9 @@ def obtener_cuestionario_con_prefill(
             if prefills_metricas and len(prefills_metricas) == len(metricas):
                 todas_auto_capturadas = True
 
-
                 for metrica, prefill_metrica in prefills_metricas:
                     confianza = float(prefill_metrica.get("confianza", 0.0))
                     fuente = prefill_metrica.get("fuente")
-
 
                     if (
                         metrica not in auto_flags
@@ -1847,10 +1835,8 @@ def obtener_cuestionario_con_prefill(
                         todas_auto_capturadas = False
                         break
 
-
                 if todas_auto_capturadas:
                     continue
-
 
             # ════════════════════════════════════════════════════════
             # REGLA 3 — BAJA CONFIANZA (mostrar con sugerencia)
@@ -1866,26 +1852,22 @@ def obtener_cuestionario_con_prefill(
                 item["prefill_fuente"] = prefill_metrica.get("fuente")
                 item["prefill_confianza"] = confianza
 
-
             items_filtrados.append(item)
-
 
         if items_filtrados:
             nueva_seccion = dict(seccion)
             nueva_seccion["items"] = items_filtrados
             secciones_filtradas.append(nueva_seccion)
 
-
     cuestionario["secciones"] = secciones_filtradas
-
 
     # Metadata (se conserva igual)
     cuestionario["prefills"] = prefills
     cuestionario["auto_flags"] = auto_flags
     cuestionario["tiene_prefills"] = bool(prefills)
 
-
     return cuestionario
+
 
 def calcular_puntaje_cualitativo(
     subject: str,
@@ -1949,7 +1931,6 @@ def calcular_puntaje_cualitativo(
         "etiqueta_total": etiqueta_total,
         "secciones": secciones_out,
     }
-
 
 # ──────────────────────────────────────────────────────────────
 # Helpers internos

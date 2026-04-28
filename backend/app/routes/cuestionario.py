@@ -42,6 +42,7 @@ from app.schemas.cuestionario import (
     BoletinResponse,
 )
 from config.cuestionarios import (
+    METRICA_A_ITEMS,                    # ← NUEVO: necesario para _build_final_respuestas
     obtener_cuestionario,
     obtener_cuestionario_con_prefill,
     calcular_puntaje_cualitativo,
@@ -53,7 +54,6 @@ from app.services.report_generator import (
 )
 
 router = APIRouter(prefix="/api/v1", tags=["cuestionario"])
-
 
 # ──────────────────────────────────────────────────────────────
 # Helpers internos
@@ -137,17 +137,58 @@ def _obs_to_prefills(respuestas: dict[str, Any] | None) -> dict[str, dict[str, A
 def _merge_prefills(
     qual: QualitativeResult | None,
     obs: ObservacionCualitativa | None,
+    subject: str | None = None,
+    test_code: str | None = None,
 ) -> dict[str, dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
 
+    # ── Expandir métricas del video → item_ids ──
     if qual and qual.prefills:
-        merged.update(qual.prefills)
+        items_del_cuestionario: set[str] = set()
+        if subject and test_code:
+            try:
+                cuestionario = obtener_cuestionario(subject, test_code)
+                for seccion in cuestionario.get("secciones", []):
+                    for item in seccion.get("items", []):
+                        items_del_cuestionario.add(item["id"])
+            except Exception:
+                pass
 
+        item_acumulado: dict[str, list[float]] = {}
+        item_confianza: dict[str, list[float]] = {}
+        item_fuente: dict[str, str] = {}
+
+        for metrica, data in qual.prefills.items():
+            if not isinstance(data, dict):
+                continue
+            valor = data.get("valor")
+            confianza = float(data.get("confianza", 0.0))
+            fuente = data.get("fuente", "sistema")
+            if valor is None:
+                continue
+
+            for item_id in METRICA_A_ITEMS.get(metrica, []):
+                if items_del_cuestionario and item_id not in items_del_cuestionario:
+                    continue
+                try:
+                    item_acumulado.setdefault(item_id, []).append(float(valor))
+                    item_confianza.setdefault(item_id, []).append(confianza)
+                    item_fuente[item_id] = fuente
+                except (TypeError, ValueError):
+                    continue
+
+        for item_id, valores in item_acumulado.items():
+            merged[item_id] = {
+                "valor": round(sum(valores) / len(valores), 2),
+                "confianza": round(sum(item_confianza[item_id]) / len(item_confianza[item_id]), 3),
+                "fuente": item_fuente.get(item_id, "sistema"),
+            }
+
+    # ── Respuestas guardadas del orientador (prioridad) ──
     if obs and obs.respuestas:
         merged.update(_obs_to_prefills(obs.respuestas))
 
     return merged
-
 
 def _flatten_respuestas(respuestas: dict[str, Any] | None) -> dict[str, Any]:
     flattened: dict[str, Any] = {}
@@ -166,27 +207,84 @@ def _flatten_respuestas(respuestas: dict[str, Any] | None) -> dict[str, Any]:
 def _build_final_respuestas(
     payload_respuestas: dict[str, Any] | None,
     qual: QualitativeResult | None,
+    subject: str | None = None,
+    test_code: str | None = None,
 ) -> dict[str, dict[str, Any]]:
+    """
+    Construye el dict final de respuestas mezclando:
+    1. Prefills del VIDEO (métricas → expandidas a item_ids)
+    2. Respuestas del ORIENTADOR (prioridad absoluta)
+
+    FIX: qual.prefills tiene claves de MÉTRICAS (pausas_largas, ritmo_trabajo…)
+    pero calcular_puntaje_cualitativo necesita claves de ITEMS (mantiene_ritmo…).
+    Este helper hace la traducción usando METRICA_A_ITEMS.
+    """
     final_respuestas: dict[str, dict[str, Any]] = {}
 
+    # ── PASO 1: Obtener qué items pertenecen al cuestionario activo ──
+    # Si no tenemos subject/test_code, saltamos la expansión de prefills
+    items_del_cuestionario: set[str] = set()
+    if subject and test_code:
+        try:
+            cuestionario = obtener_cuestionario(subject, test_code)
+            for seccion in cuestionario.get("secciones", []):
+                for item in seccion.get("items", []):
+                    items_del_cuestionario.add(item["id"])
+        except Exception:
+            pass  # Si falla, continúa sin filtrar
+
+    # ── PASO 2: Expandir métricas del video → item_ids ──
     if qual and qual.prefills:
-        for key, data in qual.prefills.items():
-            final_respuestas[key] = {
-                "valor": data.get("valor"),
+        # Acumulamos valores por item (puede haber múltiples métricas → promedio)
+        item_acumulado: dict[str, list[float]] = {}
+        item_confianza: dict[str, list[float]] = {}
+
+        for metrica, data in qual.prefills.items():
+            if not isinstance(data, dict):
+                continue
+            valor = data.get("valor")
+            confianza = float(data.get("confianza", 0.0))
+            if valor is None:
+                continue
+
+            # Obtener los items que mapea esta métrica
+            items_metrica = METRICA_A_ITEMS.get(metrica, [])
+
+            for item_id in items_metrica:
+                # Solo inyectar items que existen en ESTE cuestionario
+                if items_del_cuestionario and item_id not in items_del_cuestionario:
+                    continue
+                try:
+                    item_acumulado.setdefault(item_id, []).append(float(valor))
+                    item_confianza.setdefault(item_id, []).append(confianza)
+                except (TypeError, ValueError):
+                    continue
+
+        # Promediar y guardar
+        for item_id, valores in item_acumulado.items():
+            valor_promedio = sum(valores) / len(valores)
+            confianza_promedio = sum(item_confianza[item_id]) / len(item_confianza[item_id])
+            final_respuestas[item_id] = {
+                "valor": round(valor_promedio, 2),
                 "fuente": "sistema",
                 "corregido": False,
+                "confianza": round(confianza_promedio, 3),
             }
 
+    # ── PASO 3: Respuestas del orientador — prioridad absoluta ──
     for key, value in (payload_respuestas or {}).items():
         valor = value.get("valor") if isinstance(value, dict) and "valor" in value else value
         final_respuestas[key] = {
             "valor": valor,
             "fuente": "orientador",
-            "corregido": bool(qual and key in (qual.auto_captured_flags or [])),
+            "corregido": bool(
+                qual
+                and key in (qual.auto_captured_flags or [])
+            ),
+            "confianza": 1.0,
         }
 
     return final_respuestas
-
 
 # ──────────────────────────────────────────────────────────────
 # GET /cuestionario/{result_id}
@@ -214,7 +312,7 @@ def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
         .first()
     )
 
-    prefills = _merge_prefills(qual, obs)
+    prefills = _merge_prefills(qual, obs, subject=template.subject, test_code=template.code)
     prefill_flags = qual.auto_captured_flags if qual and qual.auto_captured_flags else []
     tiene_prefills = bool(prefills)
 
@@ -311,6 +409,8 @@ def submit_cuestionario(
     final_respuestas = _build_final_respuestas(
         payload_respuestas=payload.respuestas,
         qual=qual,
+        subject=template.subject,        # ya disponible en el endpoint
+        test_code=template.code,         # ya disponible en el endpoint
     )
     respuestas_para_calculo = _flatten_respuestas(final_respuestas)
 
@@ -359,6 +459,7 @@ def submit_cuestionario(
         boletin_habilitado=True,
         message="Cuestionario cualitativo guardado correctamente.",
     )
+
 # ──────────────────────────────────────────────────────────────
 # GET /boletin/{result_id}
 # ──────────────────────────────────────────────────────────────
