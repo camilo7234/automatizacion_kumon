@@ -96,7 +96,7 @@ export async function loadCuestionario() {
   clearAlert(el.cuestionarioAlert);
 
 
-  _questions    = _extraerItemsDeSeciones(data.cuestionario?.secciones ?? []);
+  _questions    = _normalizeQuestions(data.questions ?? []);
   _yaCompletado = Boolean(data.ya_completado);
 
 
@@ -166,45 +166,28 @@ function _renderHeader(data) {
 
 
 /* ══════════════════════════════════════════════
-   EXTRACTOR — convierte secciones del backend
-   en lista plana de items para el formulario.
-   CORRECCIÓN:
-   - seccion.items → seccion.preguntas
-     (clave real de CuestionarioResponse según el schema
-      y la función obtener_cuestionario del backend)
-   - seccion.titulo → seccion.nombre
-     (clave real del objeto sección retornado por el backend)
+   NORMALIZE QUESTIONS — consume el array plano
+   que viene de data.questions (backend).
+   Convierte value a String para que los checked
+   funcionen correctamente contra saved (int).
    ══════════════════════════════════════════════ */
-function _extraerItemsDeSeciones(secciones) {
-  const escala = [1, 2, 3, 4, 5];
-  const labelMap = {
-    1: 'Muy bajo',
-    2: 'Bajo',
-    3: 'Medio',
-    4: 'Alto',
-    5: 'Muy alto',
-  };
+function _normalizeQuestions(questions) {
+  return questions.map(q => ({
+    id:                q.id,
+    label:             q.label ?? q.id,
+    type:              q.type ?? QUESTION_TYPE.RADIO,
+    required:          q.required ?? true,
+    sectionId:         q.section_id    ?? '',
+    sectionTitle:      q.section_title ?? '',
+    options:           (q.options ?? []).map(opt => ({
+      value: String(opt.value),
+      label: opt.label ?? String(opt.value),
+    })),
+    prefill_valor:     q.prefill_valor     ?? null,
+    prefill_fuente:    q.prefill_fuente    ?? null,
+    prefill_confianza: q.prefill_confianza ?? null,
+  }));
 
-
-  const questions = [];
-
-
-  for (const seccion of secciones) {
-    for (const item of (seccion.preguntas ?? [])) {
-      questions.push({
-        id:                item.id,
-        label:             item.texto ?? item.id,
-        type:              QUESTION_TYPE.RADIO,
-        required:          true,
-        sectionId:         seccion.nombre,
-        sectionTitle:      seccion.nombre,
-        options:           escala.map(v => ({ value: String(v), label: labelMap[v] })),
-        prefill_valor:     item.prefill_valor     ?? null,
-        prefill_fuente:    item.prefill_fuente    ?? null,
-        prefill_confianza: item.prefill_confianza ?? null,
-      });
-    }
-  }
 
 
   return questions;
@@ -292,7 +275,7 @@ function _buildInput(q, readOnly, saved) {
     case QUESTION_TYPE.RADIO: {
       const options = q.options ?? [];
       return options.map(opt => {
-        const checked = saved === opt.value ? 'checked' : '';
+        const checked = String(saved) === String(opt.value) ? 'checked' : '';
         const optId   = `${id}_${opt.value}`;
         return `
           <label class="radio-option ${readOnly && checked ? 'selected' : ''}">

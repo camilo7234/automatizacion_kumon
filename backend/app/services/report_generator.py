@@ -97,6 +97,27 @@ class QualitativeInput:
 
 
 # ══════════════════════════════════════════════════════════════════
+# Sanitizador JSON — elimina Decimal antes de persistir en JSONB
+# ══════════════════════════════════════════════════════════════════
+
+def _sanitize_decimals(obj: Any) -> Any:
+    """
+    Recorre recursivamente obj y convierte Decimal → float.
+    Necesario porque PostgreSQL/psycopg2 puede deserializar
+    columnas JSONB con valores numéricos como decimal.Decimal,
+    que no es serializable por json.dumps nativo de Python.
+    Solo modifica instancias de Decimal; no altera ningún otro tipo.
+    """
+    if isinstance(obj, dict):
+        return {k: _sanitize_decimals(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_decimals(v) for v in obj]
+    if isinstance(obj, Decimal):
+        return float(obj)
+    return obj
+
+
+# ══════════════════════════════════════════════════════════════════
 # FUNCIÓN PRINCIPAL
 # ══════════════════════════════════════════════════════════════════
 
@@ -121,13 +142,12 @@ def build_report_data(
     comb_block  = _build_combinado_block(cuant_block, cual_block, integrado)
     gaze_block  = cualitativo.gaze_data or None
 
-    return {
+    return _sanitize_decimals({
         "cuantitativo": cuant_block,
         "cualitativo":  cual_block,
         "combinado":    comb_block,
         "gaze":         gaze_block,
-    }
-
+    })
 # ══════════════════════════════════════════════════════════════════
 # Helpers internos
 # ══════════════════════════════════════════════════════════════════

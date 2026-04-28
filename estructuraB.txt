@@ -1,6 +1,28 @@
 automatizacion_kumon/
 ├── frontend/
-│   └── index.html                          ← SPA monolítica (2078 líneas, HTML+CSS+JS)
+│   ├── js/
+│   │   ├──api.js
+│   │   ├──app.js
+│   │   ├──boletin.js
+│   │   ├──config.js
+│   │   ├──cuestionario.js
+│   │   ├──formatters.js
+│   │   ├──polling.js
+│   │   ├──resultado.js
+│   │   ├──state.js
+│   │   ├──ui.js
+│   │   ├──upload.js
+│   ├── css/
+│   │   ├──base.css
+│   │   ├──components.css
+│   │   ├──layout.csstokens.css
+│   │   ├── modules/
+│   │   │   ├── boletin.css
+│   │   │   ├── cuestionario.css
+│   │   │   ├── pipeline.css
+│   │   │   ├── result.css
+│   │   │   ├── upload.css
+│   └── index.html                          
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                         ← Entrypoint FastAPI
