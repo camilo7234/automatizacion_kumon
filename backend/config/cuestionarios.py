@@ -1747,21 +1747,30 @@ def obtener_cuestionario_con_prefill(
     auto_flags: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
-    Retorna el cuestionario con prefills y flags automáticos.
+    Retorna el cuestionario con prefills y flags automáticos aplicando
+    filtrado inteligente por item.
 
-    🔧 MEJORA: ahora aplica filtrado inteligente según:
-    - ALWAYS_MANUAL (postura)
-    - AUTO_CAPTURED (omitir si confianza >= umbral)
-    - BAJA CONFIANZA (mostrar con sugerencia)
-    - SIN MÉTRICA (mostrar siempre)
+    IMPORTANTE: el dict `prefills` que recibe esta función YA tiene claves
+    de ITEM_ID (no de métrica), porque _merge_prefills() en la ruta hace la
+    expansión métrica → item antes de llamar aquí.
+
+    Reglas aplicadas por item:
+      - REGLA 0: si el item tiene prefill del orientador (fuente="orientador"),
+                 siempre se muestra con su valor prellenado.
+      - REGLA 1: sección "postura" → siempre manual, nunca se oculta.
+      - REGLA 4: item sin métricas conocidas → siempre se muestra.
+      - REGLA 2: item con prefill automático de alta confianza (>= umbral)
+                 cuya fuente sea "sistema" → se omite (ya fue capturado).
+      - REGLA 3: item con prefill automático de baja confianza → se muestra
+                 con la sugerencia prellenada para que el orientador confirme.
     """
-
     cuestionario = obtener_cuestionario(subject, test_code)
 
     prefills = prefills or {}
     auto_flags = auto_flags or []
 
     # Invertir el mapeo: item_id → métricas relacionadas
+    # Solo se usa para saber si un item "tiene métrica" (Regla 4).
     ITEM_A_METRICAS: Dict[str, List[str]] = {}
     for metrica, items in METRICA_A_ITEMS.items():
         for item in items:
@@ -1779,79 +1788,82 @@ def obtener_cuestionario_con_prefill(
             item_id = item.get("id")
 
             # ════════════════════════════════════════════════════════
-            # PREFILL DIRECTO DEL ITEM
-            # Si el orientador ya respondió este item, su valor final
-            # tiene prioridad y el item nunca debe ocultarse.
-            # ════════════════════════════════════════════════════════
-            item_prefill = prefills.get(item_id)
-            if item_prefill and isinstance(item_prefill, dict):
-                confianza_item = float(item_prefill.get("confianza", 0.0))
-                item = dict(item)  # evitar mutación del original
-                item["prefill_valor"] = item_prefill.get("valor")
-                item["prefill_fuente"] = item_prefill.get("fuente")
-                item["prefill_confianza"] = confianza_item
-                items_filtrados.append(item)
-                continue
-
-            # ════════════════════════════════════════════════════════
             # REGLA 1 — ALWAYS_MANUAL (postura)
+            # Se aplica ANTES del prefill para no ocultar nunca la sección
+            # de postura, independientemente de si tiene prefill o no.
             # ════════════════════════════════════════════════════════
             if seccion_id == "postura":
+                item_prefill = prefills.get(item_id)
+                if item_prefill and isinstance(item_prefill, dict):
+                    item = dict(item)
+                    item["prefill_valor"]    = item_prefill.get("valor")
+                    item["prefill_fuente"]   = item_prefill.get("fuente")
+                    item["prefill_confianza"] = float(item_prefill.get("confianza", 0.0))
                 items_filtrados.append(item)
                 continue
 
-            metricas = ITEM_A_METRICAS.get(item_id, [])
+            # ════════════════════════════════════════════════════════
+            # BUSCAR PREFILL DEL ITEM (clave = item_id, ya expandido)
+            # ════════════════════════════════════════════════════════
+            item_prefill = prefills.get(item_id)
 
             # ════════════════════════════════════════════════════════
-            # REGLA 4 — SIN MÉTRICA (mostrar siempre)
+            # REGLA 0 — ORIENTADOR: si la fuente es "orientador",
+            # siempre se muestra con su valor (respuesta guardada previa).
             # ════════════════════════════════════════════════════════
-            if not metricas:
-                items_filtrados.append(item)
-                continue
-
-            prefills_metricas = []
-            for metrica in metricas:
-                prefill_metrica = prefills.get(metrica)
-                if prefill_metrica and isinstance(prefill_metrica, dict):
-                    prefills_metricas.append((metrica, prefill_metrica))
-
-            # ════════════════════════════════════════════════════════
-            # REGLA 2 — AUTO_CAPTURED (omitir si TODAS las métricas
-            # relacionadas fueron capturadas automáticamente con
-            # confianza alta y la fuente final no es orientador)
-            # ════════════════════════════════════════════════════════
-            if prefills_metricas and len(prefills_metricas) == len(metricas):
-                todas_auto_capturadas = True
-
-                for metrica, prefill_metrica in prefills_metricas:
-                    confianza = float(prefill_metrica.get("confianza", 0.0))
-                    fuente = prefill_metrica.get("fuente")
-
-                    if (
-                        metrica not in auto_flags
-                        or fuente == "orientador"
-                        or confianza < UMBRAL_CONFIANZA
-                    ):
-                        todas_auto_capturadas = False
-                        break
-
-                if todas_auto_capturadas:
+            if item_prefill and isinstance(item_prefill, dict):
+                if item_prefill.get("fuente") == "orientador":
+                    item = dict(item)
+                    item["prefill_valor"]    = item_prefill.get("valor")
+                    item["prefill_fuente"]   = "orientador"
+                    item["prefill_confianza"] = 1.0
+                    items_filtrados.append(item)
                     continue
 
             # ════════════════════════════════════════════════════════
-            # REGLA 3 — BAJA CONFIANZA (mostrar con sugerencia)
-            # Solo se prellena automáticamente cuando hay una sola
-            # métrica asociada al item. Si hay varias, no se fuerza
-            # una sugerencia ambigua.
+            # REGLA 4 — SIN MÉTRICA: item sin mapeo conocido en
+            # METRICA_A_ITEMS → siempre se muestra, no hay señal automática
+            # que lo pueda capturar.
             # ════════════════════════════════════════════════════════
-            if len(prefills_metricas) == 1:
-                _, prefill_metrica = prefills_metricas[0]
-                confianza = float(prefill_metrica.get("confianza", 0.0))
-                item = dict(item)  # evitar mutación del original
-                item["prefill_valor"] = prefill_metrica.get("valor")
-                item["prefill_fuente"] = prefill_metrica.get("fuente")
-                item["prefill_confianza"] = confianza
+            tiene_metrica = item_id in ITEM_A_METRICAS
+            if not tiene_metrica:
+                items_filtrados.append(item)
+                continue
 
+            # ════════════════════════════════════════════════════════
+            # REGLA 2 — AUTO_CAPTURED: el item tiene prefill automático
+            # con confianza suficiente → se omite, el sistema ya lo capturó.
+            #
+            # Condiciones para omitir:
+            #   1. Existe un prefill para este item_id
+            #   2. La fuente es "sistema" (no orientador)
+            #   3. La confianza >= UMBRAL_CONFIANZA
+            #
+            # CORRECCIÓN DEL BUG ANTERIOR: se evalúa sobre el prefill
+            # del item_id directamente (no sobre claves de métrica),
+            # porque _merge_prefills() ya hizo la expansión antes.
+            # ════════════════════════════════════════════════════════
+            if item_prefill and isinstance(item_prefill, dict):
+                fuente    = item_prefill.get("fuente", "sistema")
+                confianza = float(item_prefill.get("confianza", 0.0))
+
+                if fuente != "orientador" and confianza >= UMBRAL_CONFIANZA:
+                    # Alta confianza automática → omitir del cuestionario
+                    continue
+
+                # ════════════════════════════════════════════════════
+                # REGLA 3 — BAJA CONFIANZA: tiene prefill automático pero
+                # con confianza insuficiente → mostrar con sugerencia para
+                # que el orientador confirme o corrija.
+                # ════════════════════════════════════════════════════
+                item = dict(item)
+                item["prefill_valor"]    = item_prefill.get("valor")
+                item["prefill_fuente"]   = fuente
+                item["prefill_confianza"] = confianza
+                items_filtrados.append(item)
+                continue
+
+            # Sin prefill de ningún tipo → mostrar sin sugerencia
             items_filtrados.append(item)
 
         if items_filtrados:
@@ -1862,12 +1874,11 @@ def obtener_cuestionario_con_prefill(
     cuestionario["secciones"] = secciones_filtradas
 
     # Metadata (se conserva igual)
-    cuestionario["prefills"] = prefills
-    cuestionario["auto_flags"] = auto_flags
+    cuestionario["prefills"]       = prefills
+    cuestionario["auto_flags"]     = auto_flags
     cuestionario["tiene_prefills"] = bool(prefills)
 
     return cuestionario
-
 
 def calcular_puntaje_cualitativo(
     subject: str,

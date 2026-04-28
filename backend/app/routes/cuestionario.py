@@ -40,6 +40,8 @@ from app.schemas.cuestionario import (
     RespuestaCuestionarioRequest,
     CuestionarioSubmitResponse,
     BoletinResponse,
+    BoletinPatchRequest,
+    BoletinPatchResponse,
 )
 from config.cuestionarios import (
     METRICA_A_ITEMS,                    # ← NUEVO: necesario para _build_final_respuestas
@@ -657,6 +659,123 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         combinado=datos.get("combinado", {}),
         gaze=datos.get("gaze"),
         message="Boletín generado correctamente.",
+    )
+
+
+# ──────────────────────────────────────────────────────────────
+# PATCH /boletin/{result_id}
+# ──────────────────────────────────────────────────────────────
+
+@router.patch("/boletin/{result_id}", response_model=BoletinPatchResponse)
+def patch_boletin(
+    result_id: UUID,
+    payload: BoletinPatchRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Aplica correcciones puntuales sobre los datos del boletín ya generado.
+
+    Cada corrección usa notación dot-path para navegar el dict datos_boletin
+    y sobreescribir el valor en esa ruta exacta.
+
+    Ejemplos de campo:
+      "cuantitativo.recommendation"
+      "cualitativo.secciones.0.puntaje"
+      "combinado.narrativa"
+
+    El boletín corregido se persiste en bulletin.datos_boletin, que es la
+    fuente que usa get_boletin_pdf() al generar el PDF final.
+    No se recalcula nada: solo se escribe lo que el orientador indica.
+    """
+    result = (
+        db.query(TestResult)
+        .filter(TestResult.id_result == result_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resultado no encontrado.",
+        )
+
+    template = _get_template_or_409(result)
+
+    bulletin = (
+        db.query(Bulletin)
+        .filter(Bulletin.id_result == result.id_result)
+        .first()
+    )
+    if not bulletin or not bulletin.datos_boletin:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El boletín no existe aún. Genera el boletín antes de corregirlo.",
+        )
+
+    # Trabajar sobre una copia mutable del JSON persistido
+    import copy
+    datos = copy.deepcopy(bulletin.datos_boletin)
+
+    correcciones_aplicadas = 0
+    errores: list[str] = []
+
+    for correccion in payload.correcciones:
+        partes = correccion.campo.split(".")
+        nodo = datos
+        try:
+            # Navegar hasta el penúltimo nivel
+            for parte in partes[:-1]:
+                if isinstance(nodo, list):
+                    nodo = nodo[int(parte)]
+                else:
+                    nodo = nodo[parte]
+
+            # Aplicar el valor en el último nivel
+            clave_final = partes[-1]
+            if isinstance(nodo, list):
+                nodo[int(clave_final)] = correccion.valor_nuevo
+            else:
+                nodo[clave_final] = correccion.valor_nuevo
+
+            correcciones_aplicadas += 1
+        except (KeyError, IndexError, ValueError, TypeError) as exc:
+            errores.append(f"'{correccion.campo}': {exc}")
+
+    if errores:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"No se pudieron aplicar {len(errores)} corrección(es): {'; '.join(errores)}",
+        )
+
+    # Registrar auditoría de quién corrigió y cuándo
+    audit = bulletin.datos_boletin.get("_auditoria_correcciones", [])
+    audit.append({
+        "corregido_por": payload.corregido_por,
+        "corregido_at":  datetime.now(timezone.utc).isoformat(),
+        "campos": [c.campo for c in payload.correcciones],
+    })
+    datos["_auditoria_correcciones"] = audit
+
+    # Persistir — sqlalchemy necesita asignación directa para detectar el cambio en JSONB
+    bulletin.datos_boletin = datos
+    bulletin.status        = "corregido"
+    db.add(bulletin)
+    db.commit()
+    db.refresh(bulletin)
+
+    datos_final = bulletin.datos_boletin
+    return BoletinPatchResponse(
+        boletin_id=bulletin.id_bulletin,
+        result_id=result.id_result,
+        subject=template.subject,
+        test_code=template.code,
+        status=bulletin.status,
+        generated_at=bulletin.generated_at,
+        cuantitativo=datos_final.get("cuantitativo", {}),
+        cualitativo=datos_final.get("cualitativo", {}),
+        combinado=datos_final.get("combinado", {}),
+        gaze=datos_final.get("gaze"),
+        correcciones_aplicadas=correcciones_aplicadas,
+        message=f"Boletín corregido por {payload.corregido_por}. {correcciones_aplicadas} campo(s) actualizados.",
     )
 
 # ──────────────────────────────────────────────────────────────

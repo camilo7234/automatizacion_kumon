@@ -377,3 +377,598 @@
     justify-content: center;
   }
 }
+
+/* ============================================================
+   EDITOR DE BOLETÍN — estilos nuevos
+   Prefijo .editor-* en todos los selectores.
+   No pisa nada del CSS existente.
+   ============================================================ */
+
+
+/* ══════════════════════════════════════════════
+   SECCIÓN CONTENEDOR + HEADER CON TABS
+   ══════════════════════════════════════════════ */
+.editor-section-header {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  flex-wrap:       wrap;
+  gap:             var(--space-3);
+  margin-bottom:   var(--space-4);
+}
+
+.editor-tabs {
+  display: flex;
+  gap:     var(--space-2);
+}
+
+.editor-tab {
+  padding:       var(--space-2) var(--space-4);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-full);
+  background:    var(--surface);
+  color:         var(--muted);
+  font-size:     var(--text-sm);
+  font-weight:   600;
+  cursor:        pointer;
+  transition:    background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.editor-tab:hover {
+  background:   var(--surface-2);
+  border-color: var(--primary-2);
+  color:        var(--text);
+}
+
+.editor-tab.active {
+  background:   var(--primary);
+  border-color: var(--primary);
+  color:        #fff;
+}
+
+.editor-back-btn {
+  font-size:  var(--text-sm);
+  flex-shrink: 0;
+}
+
+
+/* ══════════════════════════════════════════════
+   PANELES DE TAB
+   ══════════════════════════════════════════════ */
+.editor-panel {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-5);
+}
+
+
+/* ══════════════════════════════════════════════
+   HEADER DEL ESTUDIANTE (vista padre)
+   ══════════════════════════════════════════════ */
+.editor-student-header {
+  background:    var(--grad-result);
+  border-radius: var(--radius-md);
+  padding:       var(--space-6);
+  color:         #fff;
+  display:       flex;
+  flex-direction: column;
+  gap:           var(--space-2);
+  position:      relative;
+  overflow:      hidden;
+}
+
+.editor-student-header::before {
+  content:        '';
+  position:       absolute;
+  bottom:         -30px;
+  right:          -30px;
+  width:          140px;
+  height:         140px;
+  border-radius:  var(--radius-full);
+  background:     rgba(255,255,255,0.06);
+  pointer-events: none;
+}
+
+.editor-student-brand {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.editor-brand-dot {
+  width:         8px;
+  height:        8px;
+  border-radius: var(--radius-full);
+  background:    var(--warning, #f59e0b);
+  flex-shrink:   0;
+}
+
+.editor-brand-label {
+  font-size:      var(--text-xs);
+  font-weight:    800;
+  letter-spacing: 0.1em;
+  color:          rgba(255,255,255,0.75);
+  text-transform: uppercase;
+}
+
+.editor-student-name {
+  font-size:   var(--text-2xl, 1.75rem);
+  font-weight: 800;
+  color:       #fff;
+  margin:      0;
+  line-height: 1.15;
+}
+
+.editor-student-meta,
+.editor-student-dates {
+  font-size: var(--text-sm);
+  color:     rgba(255,255,255,0.78);
+  margin:    0;
+}
+
+
+/* ── KPI row dentro del header ── */
+.editor-kpi-row {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.editor-kpi-card {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            var(--space-1);
+  padding:        var(--space-3) var(--space-4);
+  background:     rgba(255,255,255,0.14);
+  border:         1px solid rgba(255,255,255,0.22);
+  border-radius:  var(--radius-md);
+  min-width:      90px;
+  text-align:     center;
+}
+
+.editor-kpi-value {
+  font-size:   var(--text-lg);
+  font-weight: 900;
+  color:       #fff;
+  line-height: 1;
+}
+
+.editor-kpi-label {
+  font-size:   var(--text-xs);
+  color:       rgba(255,255,255,0.72);
+  font-weight: 500;
+}
+
+/* Tarjeta semáforo — usa el tono del backend */
+.editor-kpi-semaforo.tone-verde   .editor-kpi-value { color: #4ade80; }
+.editor-kpi-semaforo.tone-amarillo .editor-kpi-value { color: #fbbf24; }
+.editor-kpi-semaforo.tone-rojo    .editor-kpi-value { color: #f87171; }
+
+
+/* ══════════════════════════════════════════════
+   PUNTO DE INICIO
+   ══════════════════════════════════════════════ */
+.editor-starting-point {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--space-4);
+  padding:       var(--space-4) var(--space-5);
+  background:    var(--success-bg, #f0fdf4);
+  border:        1px solid var(--success-line, #bbf7d0);
+  border-radius: var(--radius-md);
+}
+
+.editor-sp-icon {
+  font-size:   1.6rem;
+  flex-shrink: 0;
+}
+
+.editor-sp-title {
+  font-size:   var(--text-sm);
+  font-weight: 700;
+  color:       var(--success, #16a34a);
+  margin:      0;
+}
+
+.editor-sp-detail {
+  font-size: var(--text-sm);
+  color:     var(--text);
+  margin:    0;
+}
+
+
+/* ══════════════════════════════════════════════
+   LABEL DE BLOQUE
+   ══════════════════════════════════════════════ */
+.editor-block-label {
+  font-size:      var(--text-xs);
+  font-weight:    700;
+  color:          var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom:  calc(-1 * var(--space-2));
+}
+
+
+/* ══════════════════════════════════════════════
+   GRÁFICA DE BARRAS POR SECCIÓN
+   ══════════════════════════════════════════════ */
+.editor-sections-chart {
+  background:    var(--surface-2);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding:       var(--space-5);
+}
+
+.editor-chart-grid {
+  display:     flex;
+  align-items: flex-end;
+  gap:         var(--space-4);
+  height:      160px;
+}
+
+.editor-chart-col {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  flex:           1;
+  gap:            var(--space-2);
+  height:         100%;
+}
+
+.editor-chart-bar-wrap {
+  flex:           1;
+  width:          100%;
+  background:     rgba(255,255,255,0.06);
+  border-radius:  var(--radius-sm);
+  display:        flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow:       hidden;
+}
+
+.editor-chart-bar-fill {
+  background:    var(--primary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition:    height 0.4s ease;
+  min-height:    4px;
+}
+
+.editor-chart-label {
+  font-size:  var(--text-xs);
+  color:      var(--muted);
+  text-align: center;
+  line-height: 1.3;
+  max-width:  100%;
+  overflow:   hidden;
+  text-overflow: ellipsis;
+  white-space:   nowrap;
+}
+
+
+/* ══════════════════════════════════════════════
+   HÁBITOS DE TRABAJO — barras horizontales
+   ══════════════════════════════════════════════ */
+.editor-habits-block {
+  background:    var(--surface-2);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding:       var(--space-5);
+  display:       flex;
+  flex-direction: column;
+  gap:           var(--space-3);
+}
+
+.editor-habits-subtitle {
+  font-size:   var(--text-sm);
+  font-weight: 700;
+  color:       var(--text);
+  margin:      0;
+}
+
+.editor-habits-bars {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-3);
+}
+
+.editor-habit-row {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-3);
+}
+
+.editor-habit-name {
+  font-size:  var(--text-sm);
+  color:      var(--text);
+  min-width:  160px;
+  flex-shrink: 0;
+}
+
+.editor-habit-bar-wrap {
+  flex:          1;
+  height:        10px;
+  background:    rgba(255,255,255,0.08);
+  border-radius: var(--radius-full);
+  overflow:      hidden;
+}
+
+.editor-habit-bar-fill {
+  height:        100%;
+  border-radius: var(--radius-full);
+  transition:    width 0.4s ease;
+  min-width:     4px;
+}
+
+.bar-verde    { background: var(--success, #22c55e); }
+.bar-amarillo { background: var(--warning, #f59e0b); }
+.bar-naranja  { background: #f97316; }
+.bar-rojo     { background: var(--danger, #ef4444);  }
+
+.editor-habit-score {
+  font-size:   var(--text-xs);
+  font-weight: 700;
+  color:       var(--muted);
+  min-width:   40px;
+  text-align:  right;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .editor-habit-name { min-width: 110px; font-size: var(--text-xs); }
+}
+
+
+/* ══════════════════════════════════════════════
+   CHIPS DE AUTO_FLAGS
+   ══════════════════════════════════════════════ */
+.editor-flags-block {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-3);
+}
+
+.editor-flags-inner {
+  background:    var(--surface-2);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding:       var(--space-4) var(--space-5);
+  display:       flex;
+  flex-direction: column;
+  gap:           var(--space-3);
+}
+
+.editor-flags-intro {
+  font-size: var(--text-sm);
+  color:     var(--text);
+  margin:    0;
+}
+
+.editor-flags-chips {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       var(--space-2);
+}
+
+.editor-flag-chip {
+  padding:       var(--space-1) var(--space-3);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-full);
+  font-size:     var(--text-xs);
+  font-weight:   600;
+  color:         var(--text);
+  background:    var(--surface);
+}
+
+.editor-flag-chip:nth-child(3n+1) { border-color: var(--success-line, #bbf7d0); color: var(--success, #16a34a); }
+.editor-flag-chip:nth-child(3n+2) { border-color: var(--danger-line,  #fecaca); color: var(--danger,  #dc2626); }
+.editor-flag-chip:nth-child(3n+3) { border-color: var(--warning-line, #fde68a); color: var(--warning-text, #92400e); }
+
+
+/* ══════════════════════════════════════════════
+   NARRATIVA DEL ORIENTADOR
+   ══════════════════════════════════════════════ */
+.editor-narrativa-block {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-3);
+}
+
+.editor-narrativa-text {
+  background:    var(--surface-2);
+  border:        1px solid var(--line);
+  border-left:   3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding:       var(--space-4) var(--space-5);
+  font-size:     var(--text-sm);
+  color:         var(--text);
+  line-height:   1.75;
+}
+
+
+/* ══════════════════════════════════════════════
+   SEMÁFORO DE RESULTADO (vista padre)
+   ══════════════════════════════════════════════ */
+.editor-semaforo-block {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--space-4);
+  padding:       var(--space-4) var(--space-5);
+  background:    var(--surface-2);
+  border:        1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.editor-semaforo-circle {
+  width:         52px;
+  height:        52px;
+  border-radius: var(--radius-full);
+  display:       flex;
+  align-items:   center;
+  justify-content: center;
+  font-size:     1.6rem;
+  flex-shrink:   0;
+  background:    rgba(255,255,255,0.06);
+  border:        2px solid var(--line);
+}
+
+.editor-semaforo-circle.tone-verde    { background: rgba(34,197,94,0.15);  border-color: #22c55e; }
+.editor-semaforo-circle.tone-amarillo { background: rgba(245,158,11,0.15); border-color: #f59e0b; }
+.editor-semaforo-circle.tone-rojo     { background: rgba(239,68,68,0.15);  border-color: #ef4444; }
+
+.editor-semaforo-label {
+  font-size:   var(--text-sm);
+  font-weight: 700;
+  color:       var(--text);
+}
+
+.editor-semaforo-desc {
+  font-size:   var(--text-xs);
+  color:       var(--muted);
+  margin:      0;
+  line-height: 1.6;
+}
+
+
+/* ══════════════════════════════════════════════
+   SECCIONES EDITABLES (tab orientador)
+   ══════════════════════════════════════════════ */
+.editor-edit-section {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-3);
+  padding:        var(--space-5);
+  background:     var(--surface-2);
+  border:         1px solid var(--line);
+  border-radius:  var(--radius-md);
+}
+
+.editor-edit-title {
+  font-size:   var(--text-sm);
+  font-weight: 700;
+  color:       var(--text);
+  margin:      0;
+}
+
+.editor-edit-grid {
+  display:               grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap:                   var(--space-3);
+}
+
+.editor-edit-grid--full {
+  grid-template-columns: 1fr;
+}
+
+.editor-edit-field {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-1);
+}
+
+.editor-edit-label {
+  font-size:   var(--text-xs);
+  font-weight: 600;
+  color:       var(--muted);
+}
+
+.editor-edit-input {
+  font-size: var(--text-sm);
+}
+
+.editor-orientador-intro {
+  padding:       var(--space-3) var(--space-4);
+  background:    var(--info-bg, #eff6ff);
+  border:        1px solid var(--info-line, #bfdbfe);
+  border-radius: var(--radius-sm);
+  font-size:     var(--text-sm);
+  color:         var(--info-text, #1e40af);
+}
+
+.editor-orientador-intro p { margin: 0; }
+
+
+/* ══════════════════════════════════════════════
+   SLIDERS DE SECCIONES CUALITATIVAS
+   ══════════════════════════════════════════════ */
+.editor-cual-sliders {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--space-3);
+}
+
+.editor-slider-row {
+  display:     flex;
+  align-items: center;
+  gap:         var(--space-3);
+}
+
+.editor-slider-name {
+  font-size:  var(--text-sm);
+  color:      var(--text);
+  min-width:  160px;
+  flex-shrink: 0;
+}
+
+.editor-slider {
+  flex:   1;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.editor-slider-val {
+  font-size:   var(--text-sm);
+  font-weight: 700;
+  color:       var(--primary);
+  min-width:   32px;
+  text-align:  right;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .editor-slider-name { min-width: 100px; font-size: var(--text-xs); }
+  .editor-slider-row  { flex-wrap: wrap; }
+}
+
+
+/* ══════════════════════════════════════════════
+   FILA DE GUARDAR (nombre orientador + botón)
+   ══════════════════════════════════════════════ */
+.editor-save-row {
+  display:     flex;
+  align-items: flex-end;
+  gap:         var(--space-4);
+  flex-wrap:   wrap;
+  padding:     var(--space-5);
+  background:  var(--surface-2);
+  border:      1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.editor-save-btn {
+  flex-shrink: 0;
+  align-self:  flex-end;
+}
+
+@media (max-width: 480px) {
+  .editor-save-row {
+    flex-direction: column;
+    align-items:    stretch;
+  }
+  .editor-save-btn { width: 100%; justify-content: center; }
+}
+
+
+/* ══════════════════════════════════════════════
+   EMPTY STATE
+   ══════════════════════════════════════════════ */
+.editor-empty {
+  font-size: var(--text-sm);
+  color:     var(--muted);
+  padding:   var(--space-3) 0;
+  margin:    0;
+  font-style: italic;
+}

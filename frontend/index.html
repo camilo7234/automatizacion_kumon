@@ -367,8 +367,8 @@
 
 
     <!-- ──────────────────────────────────────────────────────
-         SECCIÓN 5 · BOLETÍN
-         openBoletinBtn → abre/cierra panel de correcciones
+         SECCIÓN 5 · BOLETÍN (vista resumen orientador)
+         openBoletinBtn → navega a #boletinEditorSection
          downloadPdfBtn → descarga PDF
     ────────────────────────────────────────────────────────── -->
     <section id="boletinSection" class="app-section hidden">
@@ -406,8 +406,7 @@
 
         </div>
 
-        <!-- Banner revisión manual inline del boletín
-             id buscado por boletin.js → document.getElementById('boletinManualReviewBanner') -->
+        <!-- Banner revisión manual inline del boletín -->
         <div id="boletinManualReviewBanner" class="review-banner hidden"
              role="alert" aria-live="assertive"></div>
 
@@ -422,7 +421,8 @@
         <!-- Observación cualitativa del orientador — generado por boletin.js -->
         <div id="boletinObservacion" class="boletin-observacion hidden"></div>
 
-        <!-- Panel de correcciones -->
+        <!-- Panel de correcciones (se conserva para compatibilidad,
+             queda hidden permanentemente — el editor lo reemplaza) -->
         <div id="correctionPanel" class="correction-panel hidden">
           <h3 class="correction-panel-title">Correcciones del orientador</h3>
           <div id="correctionGrid" class="correction-grid"
@@ -439,7 +439,7 @@
       <!-- Acciones del boletín -->
       <div class="boletin-actions">
 
-        <!-- Abre/cierra el panel de correcciones -->
+        <!-- Navega al editor de boletín completo -->
         <button id="openBoletinBtn" class="btn btn-secondary"
                 type="button" disabled>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -483,8 +483,168 @@
     </section>
 
 
-  </main>
+    <!-- ──────────────────────────────────────────────────────
+         SECCIÓN 6 · EDITOR DE BOLETÍN
+         Interfaz dual: vista padre (read-only) + editor orientador
+         Todos los IDs usan prefijo "editor" para evitar colisiones.
+         Gestionado completamente por boletin.js → renderBoletinEditor()
+    ────────────────────────────────────────────────────────── -->
+    <section id="boletinEditorSection" class="app-section hidden">
 
+      <div class="section-header editor-section-header">
+        <!-- Tabs de navegación -->
+        <div class="editor-tabs" role="tablist" aria-label="Vista del boletín">
+          <button id="editorTabPadre" class="editor-tab active"
+                  role="tab" aria-selected="true" type="button">
+            📋 Boletín — vista del padre
+          </button>
+          <button id="editorTabOrientador" class="editor-tab"
+                  role="tab" aria-selected="false" type="button">
+            ✏️ Editor del orientador
+          </button>
+        </div>
+
+        <!-- Botón volver -->
+        <button id="editorBackBtn" class="btn btn-ghost editor-back-btn" type="button">
+          ← Volver al resumen
+        </button>
+      </div>
+
+      <div id="editorAlert" class="alert alert-info"
+           style="display:none" role="alert"></div>
+
+      <!-- ── TAB 1: VISTA DEL PADRE (read-only, visual) ── -->
+      <div id="editorViewPadre" class="editor-panel" role="tabpanel">
+
+        <!-- Header del estudiante -->
+        <div id="editorStudentHeader" class="editor-student-header">
+          <div class="editor-student-brand">
+            <span class="editor-brand-dot"></span>
+            <span class="editor-brand-label">KUMON</span>
+          </div>
+          <h2 id="editorStudentName" class="editor-student-name">—</h2>
+          <p  id="editorStudentMeta" class="editor-student-meta">—</p>
+          <p  id="editorStudentDates" class="editor-student-dates">—</p>
+
+          <!-- KPIs hero -->
+          <div id="editorKpiRow" class="editor-kpi-row"></div>
+        </div>
+
+        <!-- Punto de inicio -->
+        <div id="editorStartingPoint" class="editor-starting-point hidden">
+          <div class="editor-sp-icon">⭐</div>
+          <div class="editor-sp-body">
+            <p class="editor-sp-title">Por donde empezará</p>
+            <p id="editorSpDetail" class="editor-sp-detail">—</p>
+          </div>
+        </div>
+
+        <!-- Gráfica barras por sección cualitativa -->
+        <div class="editor-block-label">CÓMO LE FUE EN CADA PARTE DE LA PRUEBA</div>
+        <div id="editorSectionsChart" class="editor-sections-chart"></div>
+
+        <!-- Barras de hábitos de trabajo -->
+        <div class="editor-block-label">HÁBITOS DE TRABAJO OBSERVADOS</div>
+        <div id="editorHabitsBlock" class="editor-habits-block">
+          <p class="editor-habits-subtitle">Cómo trabaja cuando estudia</p>
+          <div id="editorHabitsBars" class="editor-habits-bars"></div>
+        </div>
+
+        <!-- Chips de comportamientos observados (auto_flags) -->
+        <div id="editorFlagsBlock" class="editor-flags-block hidden">
+          <div class="editor-block-label">COMPORTAMIENTOS OBSERVADOS DURANTE LA PRUEBA</div>
+          <div class="editor-flags-inner">
+            <p class="editor-flags-intro">Se observó lo siguiente mientras resolvía:</p>
+            <div id="editorFlagsChips" class="editor-flags-chips"></div>
+          </div>
+        </div>
+
+        <!-- Lo que observó el orientador -->
+        <div id="editorNarrativaBlock" class="editor-narrativa-block">
+          <div class="editor-block-label">LO QUE OBSERVÓ EL ORIENTADOR</div>
+          <div id="editorNarrativaText" class="editor-narrativa-text">—</div>
+        </div>
+
+        <!-- Semáforo de resultado -->
+        <div class="editor-block-label">SEMÁFORO DE RESULTADO</div>
+        <div id="editorSemaforoBlock" class="editor-semaforo-block">
+          <div id="editorSemaforoCircle" class="editor-semaforo-circle"></div>
+          <div class="editor-semaforo-info">
+            <p id="editorSemaforoLabel" class="editor-semaforo-label">—</p>
+            <p id="editorSemaforoDesc"  class="editor-semaforo-desc">—</p>
+          </div>
+        </div>
+
+      </div><!-- /editorViewPadre -->
+
+      <!-- ── TAB 2: EDITOR DEL ORIENTADOR (editable) ── -->
+      <div id="editorViewOrientador" class="editor-panel hidden" role="tabpanel">
+
+        <div class="editor-orientador-intro">
+          <p>Revisa y ajusta los valores antes de generar el PDF final.
+             Solo se guardan los campos que hayas modificado.</p>
+        </div>
+
+        <!-- Datos cuantitativos editables -->
+        <div class="editor-edit-section">
+          <h3 class="editor-edit-title">📊 Datos cuantitativos</h3>
+          <div id="editorCuantGrid" class="editor-edit-grid"></div>
+        </div>
+
+        <!-- Puntajes cualitativos editables por sección -->
+        <div class="editor-edit-section">
+          <h3 class="editor-edit-title">🧠 Hábitos de trabajo (puntaje por sección)</h3>
+          <div id="editorCualSliders" class="editor-cual-sliders"></div>
+        </div>
+
+        <!-- Narrativa editable -->
+        <div class="editor-edit-section">
+          <h3 class="editor-edit-title">📝 Narrativa del orientador</h3>
+          <div class="editor-edit-grid editor-edit-grid--full">
+            <div class="editor-edit-field">
+              <label class="editor-edit-label" for="editorRecommendation">
+                Recomendación pedagógica
+              </label>
+              <textarea id="editorRecommendation"
+                        class="form-input form-textarea editor-edit-input"
+                        rows="4"
+                        placeholder="Recomendación detallada del orientador..."></textarea>
+            </div>
+            <div class="editor-edit-field">
+              <label class="editor-edit-label" for="editorNarrativa">
+                Narrativa combinada
+              </label>
+              <textarea id="editorNarrativa"
+                        class="form-input form-textarea editor-edit-input"
+                        rows="3"
+                        placeholder="Narrativa del análisis combinado..."></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nombre orientador + guardar -->
+        <div class="editor-save-row">
+          <div class="editor-edit-field">
+            <label class="editor-edit-label" for="editorCorregidoPor">
+              Corregido por
+            </label>
+            <input id="editorCorregidoPor"
+                   class="form-input editor-edit-input"
+                   type="text"
+                   placeholder="Nombre del orientador"
+                   autocomplete="off" />
+          </div>
+          <button id="editorSaveBtn" class="btn btn-primary editor-save-btn" type="button">
+            💾 Guardar y generar PDF
+          </button>
+        </div>
+
+      </div><!-- /editorViewOrientador -->
+
+    </section>
+
+
+  </main>
 
   <!-- ══════════════════════════════════════════════════════════
        FOOTER

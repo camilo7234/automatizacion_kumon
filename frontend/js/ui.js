@@ -28,7 +28,7 @@ export const el = {
   /* ── SECCIÓN UPLOAD ── */
   uploadSection:        null,  // #uploadSection
   uploadForm:           null,  // #uploadForm
-  uploadInput:          null,  // #uploadInput           (input type=file)
+  uploadInput:          null,  // #uploadInput
   uploadDropZone:       null,  // #uploadDropZone
   uploadDropFilename:   null,  // #uploadDropFilename
   uploadProgressWrap:   null,  // #uploadProgressWrap
@@ -37,18 +37,17 @@ export const el = {
   uploadAlert:          null,  // #uploadAlert
   uploadBtn:            null,  // #uploadBtn
   resetBtn:             null,  // #resetBtn
-  /* Campos del formulario — alineados con VideoUploadForm del backend */
-  subjectInput:         null,  // #subjectInput          → form field: subject
-  testCodeInput:        null,  // #testCodeInput         → form field: test_code
-  nombreCompletoInput:  null,  // #nombreCompletoInput   → form field: nombre_completo
+  subjectInput:         null,  // #subjectInput
+  testCodeInput:        null,  // #testCodeInput
+  nombreCompletoInput:  null,  // #nombreCompletoInput
 
 
   /* ── PIPELINE ── */
   pipelineSection:      null,  // #pipelineSection
-  pipelineSteps:        null,  // NodeList de .pipeline-step (se llena en initEl)
+  pipelineSteps:        null,  // NodeList .pipeline-step
   jobStatusBlock:       null,  // #jobStatusBlock
   jobStatusValue:       null,  // #jobStatusValue
-  jobProgressBar:       null,  // #jobProgressBar        (contenedor — toggle visibilidad)
+  jobProgressBar:       null,  // #jobProgressBar
   jobProgressFill:      null,  // #jobProgressFill
   jobProgressPct:       null,  // #jobProgressPct
   jobProgressText:      null,  // #jobProgressText
@@ -80,7 +79,7 @@ export const el = {
   cuestionarioStatusTag:null,  // #cuestionarioStatusTag
   cuestionarioStudent:  null,  // #cuestionarioStudent
   saveCuestionarioBtn:  null,  // #saveCuestionarioBtn
-  completadoPorInput:   null,  // #completadoPorInput    → payload.completado_por
+  completadoPorInput:   null,  // #completadoPorInput
 
 
   /* ── BOLETÍN ── */
@@ -97,11 +96,60 @@ export const el = {
   boletinConfidenceDot: null,  // #boletinConfidenceDot
   boletinConfidencePct: null,  // #boletinConfidencePct
   openBoletinBtn:       null,  // #openBoletinBtn
-  confirmBoletinBtn:    null,  // #confirmBoletinBtn     (confirmar sin cambios → habilita PDF)
+  confirmBoletinBtn:    null,  // #confirmBoletinBtn
   downloadPdfBtn:       null,  // #downloadPdfBtn
-  correctionPanel:      null,  // #correctionPanel
+  correctionPanel:      null,  // #correctionPanel (conservado, hidden permanente)
   correctionGrid:       null,  // #correctionGrid
   saveCorrectionBtn:    null,  // #saveCorrectionBtn
+
+
+  /* ── EDITOR DE BOLETÍN ── */
+  /* Sección contenedor */
+  boletinEditorSection:   null,  // #boletinEditorSection
+
+  /* Tabs de navegación */
+  editorTabPadre:         null,  // #editorTabPadre
+  editorTabOrientador:    null,  // #editorTabOrientador
+
+  /* Botón volver */
+  editorBackBtn:          null,  // #editorBackBtn
+
+  /* Alert del editor */
+  editorAlert:            null,  // #editorAlert
+
+  /* Paneles de tab */
+  editorViewPadre:        null,  // #editorViewPadre
+  editorViewOrientador:   null,  // #editorViewOrientador
+
+  /* Vista padre — header de estudiante */
+  editorStudentName:      null,  // #editorStudentName
+  editorStudentMeta:      null,  // #editorStudentMeta
+  editorStudentDates:     null,  // #editorStudentDates
+  editorKpiRow:           null,  // #editorKpiRow
+
+  /* Vista padre — bloques de contenido */
+  editorStartingPoint:    null,  // #editorStartingPoint
+  editorSpDetail:         null,  // #editorSpDetail
+  editorSectionsChart:    null,  // #editorSectionsChart
+  editorHabitsBars:       null,  // #editorHabitsBars
+  editorFlagsBlock:       null,  // #editorFlagsBlock
+  editorFlagsChips:       null,  // #editorFlagsChips
+  editorNarrativaText:    null,  // #editorNarrativaText
+  editorSemaforoCircle:   null,  // #editorSemaforoCircle
+  editorSemaforoLabel:    null,  // #editorSemaforoLabel
+  editorSemaforoDesc:     null,  // #editorSemaforoDesc
+
+  /* Vista orientador — grids editables */
+  editorCuantGrid:        null,  // #editorCuantGrid
+  editorCualSliders:      null,  // #editorCualSliders
+
+  /* Vista orientador — textareas narrativa */
+  editorRecommendation:   null,  // #editorRecommendation
+  editorNarrativa:        null,  // #editorNarrativa
+
+  /* Vista orientador — guardar */
+  editorCorregidoPor:     null,  // #editorCorregidoPor
+  editorSaveBtn:          null,  // #editorSaveBtn
 };
 
 
@@ -109,8 +157,6 @@ export const el = {
 /* ══════════════════════════════════════════════
    INICIALIZACIÓN
    Llamado UNA vez desde app.js → init()
-   Resuelve todos los ids del DOM y los guarda
-   en el objeto el.*
    ══════════════════════════════════════════════ */
 export function initEl() {
   const get = (id) => document.getElementById(id);
@@ -131,7 +177,6 @@ export function initEl() {
   el.uploadAlert          = get('uploadAlert');
   el.uploadBtn            = get('uploadBtn');
   el.resetBtn             = get('resetBtn');
-  /* Campos del formulario — IDs alineados con VideoUploadForm del backend */
   el.subjectInput         = get('subjectInput');
   el.testCodeInput        = get('testCodeInput');
   el.nombreCompletoInput  = get('nombreCompletoInput');
@@ -192,15 +237,41 @@ export function initEl() {
   el.correctionPanel      = get('correctionPanel');
   el.correctionGrid       = get('correctionGrid');
   el.saveCorrectionBtn    = get('saveCorrectionBtn');
+
+  /* Editor de boletín */
+  el.boletinEditorSection  = get('boletinEditorSection');
+  el.editorTabPadre        = get('editorTabPadre');
+  el.editorTabOrientador   = get('editorTabOrientador');
+  el.editorBackBtn         = get('editorBackBtn');
+  el.editorAlert           = get('editorAlert');
+  el.editorViewPadre       = get('editorViewPadre');
+  el.editorViewOrientador  = get('editorViewOrientador');
+  el.editorStudentName     = get('editorStudentName');
+  el.editorStudentMeta     = get('editorStudentMeta');
+  el.editorStudentDates    = get('editorStudentDates');
+  el.editorKpiRow          = get('editorKpiRow');
+  el.editorStartingPoint   = get('editorStartingPoint');
+  el.editorSpDetail        = get('editorSpDetail');
+  el.editorSectionsChart   = get('editorSectionsChart');
+  el.editorHabitsBars      = get('editorHabitsBars');
+  el.editorFlagsBlock      = get('editorFlagsBlock');
+  el.editorFlagsChips      = get('editorFlagsChips');
+  el.editorNarrativaText   = get('editorNarrativaText');
+  el.editorSemaforoCircle  = get('editorSemaforoCircle');
+  el.editorSemaforoLabel   = get('editorSemaforoLabel');
+  el.editorSemaforoDesc    = get('editorSemaforoDesc');
+  el.editorCuantGrid       = get('editorCuantGrid');
+  el.editorCualSliders     = get('editorCualSliders');
+  el.editorRecommendation  = get('editorRecommendation');
+  el.editorNarrativa       = get('editorNarrativa');
+  el.editorCorregidoPor    = get('editorCorregidoPor');
+  el.editorSaveBtn         = get('editorSaveBtn');
 }
 
 
 
 /* ══════════════════════════════════════════════
-   setAlert — muestra un mensaje de alerta
-   target : elemento DOM del alert
-   message: texto a mostrar
-   type   : 'info' | 'success' | 'warning' | 'danger'
+   setAlert
    ══════════════════════════════════════════════ */
 export function setAlert(target, message, type = 'info') {
   if (!target) return;
@@ -218,10 +289,7 @@ export function clearAlert(target) {
 
 
 /* ══════════════════════════════════════════════
-   setTag — actualiza un badge de estado
-   target : elemento DOM del tag
-   text   : texto del badge
-   type   : 'default'|'success'|'warning'|'danger'|'info'|'primary'
+   setTag
    ══════════════════════════════════════════════ */
 export function setTag(target, text, type = 'default') {
   if (!target) return;
@@ -232,9 +300,7 @@ export function setTag(target, text, type = 'default') {
 
 
 /* ══════════════════════════════════════════════
-   SHOW / HIDE — manejo de visibilidad
-   Parámetro renombrado a `node` para no shadowear
-   el objeto exportado `el` del mismo módulo.
+   SHOW / HIDE
    ══════════════════════════════════════════════ */
 export function show(node)  { if (node) node.classList.remove('hidden'); }
 export function hide(node)  { if (node) node.classList.add('hidden'); }
@@ -247,20 +313,15 @@ export function toggle(node, visible) {
 
 /* ══════════════════════════════════════════════
    BACKEND STATUS DOT
-   Actualiza el indicador de conexión en el header.
-   state: 'ok' | 'error' | 'pending'
    ══════════════════════════════════════════════ */
 export function updateBackendDot(state) {
   if (!el.backendDot) return;
-
   el.backendDot.className = `backend-status-dot ${state}`;
-
   const labels = {
     ok:      MSG.BACKEND_OK,
     error:   MSG.BACKEND_ERROR,
     pending: MSG.BACKEND_CHECKING,
   };
-
   if (el.backendLabel) {
     el.backendLabel.textContent = labels[state] ?? '';
   }
@@ -270,10 +331,6 @@ export function updateBackendDot(state) {
 
 /* ══════════════════════════════════════════════
    UPLOAD LOADING STATE
-   Muestra/oculta el estado de carga del upload
-   y bloquea el botón durante la subida.
-   Resetea la barra a 0% al iniciar para que no
-   muestre el valor residual de un upload anterior.
    ══════════════════════════════════════════════ */
 export function setLoadingUpload(loading) {
   if (el.uploadBtn) {
@@ -281,7 +338,6 @@ export function setLoadingUpload(loading) {
     el.uploadBtn.textContent = loading ? 'Subiendo...' : 'Procesar video';
   }
   if (loading) {
-    /* Resetear barra antes de mostrarla */
     setProgress(el.uploadProgressFill, el.uploadProgressPct, 0);
   }
   toggle(el.uploadProgressWrap, loading);
@@ -290,10 +346,7 @@ export function setLoadingUpload(loading) {
 
 
 /* ══════════════════════════════════════════════
-   PROGRESS BAR — actualiza el ancho de la barra
-   fill  : elemento .progress-bar-fill
-   pctEl : elemento de texto con el %
-   value : número 0–100
+   PROGRESS BAR
    ══════════════════════════════════════════════ */
 export function setProgress(fill, pctEl, value) {
   const pct = Math.min(100, Math.max(0, value));
@@ -305,20 +358,11 @@ export function setProgress(fill, pctEl, value) {
 
 /* ══════════════════════════════════════════════
    BOTONES DEL BOLETÍN
-   Separados en tres funciones independientes:
-   - setBoletinActionsEnabled: habilita botón de
-     correcciones cuando el boletín cargó.
-   - setPdfDownloadEnabled: habilita PDF solo tras
-     confirmar o guardar correcciones.
-   - resetBoletinButtons: restaura todo al estado
-     inicial para una nueva sesión.
    ══════════════════════════════════════════════ */
 export function setBoletinActionsEnabled(enabled) {
   if (el.openBoletinBtn)   el.openBoletinBtn.disabled   = !enabled;
   if (el.confirmBoletinBtn) {
     el.confirmBoletinBtn.disabled = !enabled;
-    /* Mostrar el botón de confirmar cuando se habilita,
-       ocultarlo cuando se deshabilita (reset) */
     enabled
       ? el.confirmBoletinBtn.classList.remove('hidden')
       : el.confirmBoletinBtn.classList.add('hidden');
@@ -343,10 +387,10 @@ export function resetBoletinButtons() {
   }
 }
 
+
+
 /* ══════════════════════════════════════════════
    CUESTIONARIO SUBMIT BUTTON
-   El POST /cuestionario guarda la observación;
-   el boletín se genera en GET /boletin posterior.
    ══════════════════════════════════════════════ */
 export function setCuestionarioSubmitting(submitting) {
   if (!el.saveCuestionarioBtn) return;
