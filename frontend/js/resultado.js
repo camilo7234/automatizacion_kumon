@@ -16,7 +16,7 @@
 
 
 import { MSG }                            from './config.js';
-import { getResult }                      from './api.js';
+import { getResult, getResultById}                      from './api.js';
 import { setResultData }                  from './state.js';
 import {
   el,
@@ -61,13 +61,13 @@ export function initResultado(onResultReady) {
    Llamado desde polling.js vía app.js → onJobDone
    @param {string} jobId — UUID del job completado
    ══════════════════════════════════════════════ */
-export async function loadResultado(jobId) {
+async function _loadAndRenderResultado(requestPromise) {
   show(el.resultSection);
   clearAlert(el.resultAlert);
   hide(el.resultBlock);
   setAlert(el.resultAlert, MSG.RESULT_LOADING, 'info');
 
-  const { ok, data, error } = await getResult(jobId);
+  const { ok, data, error } = await requestPromise;
 
   if (!ok || !data) {
     setAlert(el.resultAlert, error ?? MSG.RESULT_ERROR, 'danger');
@@ -94,6 +94,21 @@ export async function loadResultado(jobId) {
   _onResultReady?.();
 }
 
+export async function loadResultado(jobId) {
+  return _loadAndRenderResultado(getResult(jobId));
+}
+
+/**
+ * Carga y renderiza el resultado usando directamente
+ * el UUID del TestResult.
+ * Llamado desde app.js en el flujo manual_review
+ * cuando polling.js ya entregó result_id.
+ *
+ * @param {string} resultId — UUID de TestResult
+ */
+export async function loadResultadoById(resultId) {
+  return _loadAndRenderResultado(getResultById(resultId));
+}
 
 
 /* ══════════════════════════════════════════════

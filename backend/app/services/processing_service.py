@@ -492,7 +492,15 @@ def ejecutar_pipeline(job_id: UUID) -> None:
             processing_ms=video_result.processing_ms,
         )
         db.add(qual_db)
-        db.commit()  # ← único commit para test_result + qual_db juntos
+
+        # ──────────────────────────────────────────────────────────
+        # PASO 10: Actualizar job con el resultado final
+        # ──────────────────────────────────────────────────────────
+        job.error_message = None
+        final_status = "manual_review" if needs_review else "done"
+        _update_job(db, job, status=final_status, progress=100, commit=False)
+
+        db.commit()  # ← commit único: test_result + qual_db + estado final del job
 
         logger.info(
             f"Resultados guardados: id={test_result.id_result} | "
@@ -505,21 +513,17 @@ def ejecutar_pipeline(job_id: UUID) -> None:
         )
 
         # ──────────────────────────────────────────────────────────
-        # PASO 10: Eliminar video del disco
+        # PASO 11: Eliminar video del disco
         # ──────────────────────────────────────────────────────────
         cleanup_video(video_path)
         video_path = None
 
-        # ──────────────────────────────────────────────────────────
-        # PASO 11: Actualizar job con el resultado final
-        # ──────────────────────────────────────────────────────────
-        job.error_message = None
-        final_status = "manual_review" if needs_review else "done"
-        _update_job(db, job, status=final_status, progress=100)
         logger.info(f"Pipeline completado | job={job_id} | status={final_status}")
+
 
     except Exception as e:
         logger.error(f"Pipeline ERROR | job={job_id} | {e}", exc_info=True)
+
 
         try:
             _register_error(db, job_id, e)
@@ -534,15 +538,16 @@ def ejecutar_pipeline(job_id: UUID) -> None:
         except Exception as db_err:
             logger.error(f"Error adicional al registrar fallo: {db_err}")
 
+
         if video_path:
             try:
                 cleanup_video(video_path)
             except Exception:
                 pass
 
+
     finally:
         db.close()
-
         
 # ══════════════════════════════════════════════════════════════════
 # Cálculo cualitativo e integrado (Kumon 65/35)
@@ -785,9 +790,10 @@ def _update_job(
     status:   Optional[str] = None,
     progress: Optional[int] = None,
     error:    Optional[str] = None,
+    commit:   bool = True,
 ) -> None:
     """
-    Actualiza el estado del job en BD y hace commit.
+    Actualiza el estado del job en BD y hace commit por defecto.
 
 
     Nota:
@@ -814,13 +820,15 @@ def _update_job(
         job.error_message = error
 
 
+    if not commit:
+        return
+
+
     try:
         db.commit()
     except Exception as e:
         logger.warning(f"No se pudo hacer commit en _update_job: {e}")
         db.rollback()
-
-
 
 def _register_error(db: Session, job_id: UUID, exc: Exception) -> None:
     """

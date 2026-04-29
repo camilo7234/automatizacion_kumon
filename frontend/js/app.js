@@ -25,7 +25,7 @@ import { resetState, getResultId }                         from './state.js';
 import { checkHealth }                                     from './api.js';
 import { initUpload,       resetUpload }                   from './upload.js';
 import { initPolling,      startPolling,   resetPolling }  from './polling.js';
-import { initResultado,    loadResultado,  resetResultado } from './resultado.js';
+import { initResultado,    loadResultado,  loadResultadoById,resetResultado } from './resultado.js';
 import { initCuestionario, loadCuestionario, resetCuestionario } from './cuestionario.js';
 import { initBoletin,      loadBoletin,    resetBoletin }  from './boletin.js';
 
@@ -134,7 +134,7 @@ function _onManualReview(resultId) {
   if (resultId) {
     /* Caso normal: result_id llegó, cargar resultado parcial */
     setAlert(el.resultAlert, MSG.POLLING_MANUAL_REVIEW, 'warning');
-    loadResultado(resultId);
+    loadResultadoById(resultId);
     return;
   }
 
@@ -149,7 +149,6 @@ function _onManualReview(resultId) {
   );
   loadCuestionario();
 }
-
 
 /**
  * PASO 3 → 4
