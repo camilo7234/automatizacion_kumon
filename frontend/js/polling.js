@@ -9,7 +9,10 @@
         - Al recibir status "done" entrega result_id al callback onJobDone
         - Al recibir status "error" llama onJobError y detiene el loop
         - Al recibir status "manual_review" llama onManualReview y detiene
+          SOLO cuando result_id ya está disponible en el payload del job,
+          o bien cuando se agotan los reintentos internos (MAX_RESULT_WAIT_TICKS).
    ============================================================ */
+
 
 
 import {
@@ -21,6 +24,7 @@ import {
   MSG,
   PIPELINE_STEPS,
 } from './config.js';
+
 
 import { getJob }                         from './api.js';
 import {
@@ -48,6 +52,7 @@ import {
 
 
 
+
 /* ══════════════════════════════════════════════
    ESTADO INTERNO DEL MÓDULO
    ══════════════════════════════════════════════ */
@@ -55,6 +60,26 @@ let _onJobDone      = null;   // callback(resultId: string) → void
 let _onJobError     = null;   // callback(errorMsg: string) → void
 let _onManualReview = null;   // callback(resultId: string | null) → void
 let _jobId          = null;   // string — job activo
+
+/*
+ * Contador de ticks extras en los que el job ya marcó manual_review
+ * pero result_id todavía no llegó en el payload.
+ *
+ * El pipeline escribe TestResult en BD y luego hace _update_job() con
+ * status=manual_review. Hay una ventana de milisegundos en la que el
+ * frontend puede leer el job ya terminado antes de que SQLAlchemy confirme
+ * la fila de TestResult (commit vs autocommit del ORM).
+ *
+ * Solución: si result_id es null en el primer tick de manual_review,
+ * NO detenemos el polling — seguimos hasta MAX_RESULT_WAIT_TICKS ticks
+ * extra. Cada tick re-consulta el job; en cuanto result_id aparezca,
+ * disparamos onManualReview normalmente.
+ * Si se agotan los ticks, pasamos el control a app.js con result_id=null
+ * para que muestre el cuestionario sin datos cuantitativos.
+ */
+let _manualReviewPendingTicks = 0;
+const MAX_RESULT_WAIT_TICKS   = 6;   // 6 × POLL_INTERVAL_MS ≈ 9 s de ventana
+
 
 
 
@@ -66,11 +91,13 @@ let _jobId          = null;   // string — job activo
    ══════════════════════════════════════════════ */
 const STEP_IDS = PIPELINE_STEPS.map(s => s.id);
 
+
 function _getPipelineStepEl(stepId) {
   return document.querySelector(
     `.pipeline-step[data-step="${stepId}"]`
   );
 }
+
 
 /**
  * Actualiza el estado visual de los pasos del pipeline.
@@ -79,11 +106,14 @@ function _getPipelineStepEl(stepId) {
 function _updatePipelineSteps(status) {
   const activeIndex = _statusToStepIndex(status);
 
+
   STEP_IDS.forEach((stepId, index) => {
     const stepEl = _getPipelineStepEl(stepId);
     if (!stepEl) return;
 
+
     stepEl.classList.remove('active', 'completed', 'error', 'warning');
+
 
     if (status === JOB_STATUS.ERROR) {
       if (index < activeIndex)   stepEl.classList.add('completed');
@@ -91,16 +121,19 @@ function _updatePipelineSteps(status) {
       return;
     }
 
+
     if (status === JOB_STATUS.MANUAL_REVIEW) {
       if (index < activeIndex)   stepEl.classList.add('completed');
       if (index === activeIndex) stepEl.classList.add('warning');
       return;
     }
 
+
     if (index < activeIndex)   stepEl.classList.add('completed');
     if (index === activeIndex) stepEl.classList.add('active');
   });
 }
+
 
 /**
  * Mapea job.status al índice de paso en el pipeline visual.
@@ -118,6 +151,7 @@ function _statusToStepIndex(status) {
   };
   return map[status] ?? 0;
 }
+
 
 
 
@@ -165,6 +199,7 @@ function _updateJobProgress(data) {
 
 
 
+
 /* ══════════════════════════════════════════════
    INIT
    Llamado desde app.js → init()
@@ -178,12 +213,16 @@ export function initPolling(onJobDone, onJobError, onManualReview) {
 
 
 
+
 /* ══════════════════════════════════════════════
    START POLLING
    Llamado desde upload.js vía app.js → onUploadDone
    ══════════════════════════════════════════════ */
 export function startPolling(jobId) {
   _jobId = jobId;
+
+  /* Resetear contador de espera por result_id */
+  _manualReviewPendingTicks = 0;
 
   /* Mostrar sección pipeline */
   show(el.pipelineSection);
@@ -201,6 +240,7 @@ export function startPolling(jobId) {
   const timer = setInterval(_tick, POLL_INTERVAL_MS);
   setPollingTimer(timer);
 }
+
 
 
 
@@ -243,7 +283,6 @@ async function _tick() {
     const resultId = data?.result_id ?? null;
 
     if (!resultId) {
-      /* El job terminó pero no hay result_id — caso anómalo */
       setAlert(
         el.resultAlert,
         'El procesamiento terminó pero no se generó un resultado.',
@@ -262,7 +301,6 @@ async function _tick() {
   if (status === JOB_STATUS.ERROR) {
     _stopPolling();
 
-    /* error_message es el campo real de JobStatusResponse */
     const errorMsg =
       data?.error_message ??
       'El procesamiento falló. Intenta con otro video.';
@@ -274,21 +312,56 @@ async function _tick() {
 
   /* ── JOB CON REVISIÓN MANUAL REQUERIDA ── */
   if (status === JOB_STATUS.MANUAL_REVIEW) {
-    _stopPolling();
-
-    /* Puede existir un result_id parcial incluso en manual_review */
     const resultId = data?.result_id ?? null;
+
     if (resultId) {
+      /*
+       * CASO NORMAL: result_id ya está en el payload.
+       * Sin race condition — disparar callback de inmediato.
+       */
+      _stopPolling();
+      _manualReviewPendingTicks = 0;
       setResultId(resultId);
+      _onManualReview?.(resultId);
+      return;
     }
 
-    _onManualReview?.(resultId);
+    /*
+     * CASO RACE CONDITION: job en manual_review pero result_id = null.
+     * El pipeline hace:
+     *   1. db.add(test_result) + db.flush()
+     *   2. db.add(qual_db)
+     *   3. db.commit()                    ← TestResult visible aquí
+     *   4. _update_job(manual_review)     ← job actualizado aquí
+     *
+     * El polling puede leer el job justo entre (3) y (4), o
+     * inmediatamente después de (4) antes de que get_job_status()
+     * resuelva el result_id desde la sesión recién comprometida.
+     *
+     * Solución: NO detenemos el polling. Seguimos tickeando hasta
+     * MAX_RESULT_WAIT_TICKS. En cuanto result_id aparezca, el bloque
+     * anterior lo captura. Si se agotan los ticks, cedemos con null.
+     */
+    _manualReviewPendingTicks++;
+
+    if (el.jobProgressText) {
+      el.jobProgressText.textContent =
+        `Revisión manual detectada — esperando resultado (${_manualReviewPendingTicks}/${MAX_RESULT_WAIT_TICKS})…`;
+    }
+
+    if (_manualReviewPendingTicks >= MAX_RESULT_WAIT_TICKS) {
+      _stopPolling();
+      _manualReviewPendingTicks = 0;
+      _onManualReview?.(null);
+    }
+
     return;
   }
 
   /* ── JOB ACTIVO — continuar polling ── */
   // El loop de setInterval seguirá llamando _tick()
 }
+
 
 
 
@@ -306,6 +379,7 @@ function _stopPolling() {
 
 
 
+
 /* ══════════════════════════════════════════════
    RESET PÚBLICO
    Llamado desde app.js → resetAll()
@@ -313,6 +387,7 @@ function _stopPolling() {
 export function resetPolling() {
   _stopPolling();
   _jobId = null;
+  _manualReviewPendingTicks = 0;
 
   /* Limpiar pipeline visual */
   STEP_IDS.forEach((stepId) => {

@@ -13,6 +13,7 @@
    ============================================================ */
 
 
+
 /* ── Módulos propios ── */
 import {
   initEl, el,
@@ -33,6 +34,7 @@ import { MSG }                                             from './config.js';
 
 /* ── Constantes ── */
 const HEALTH_CHECK_INTERVAL_MS = 30_000;   // cada 30 s
+
 
 
 
@@ -67,6 +69,7 @@ function init() {
   _runHealthCheck();
   setInterval(_runHealthCheck, HEALTH_CHECK_INTERVAL_MS);
 }
+
 
 
 
@@ -114,20 +117,37 @@ function _onJobError(errorMsg) {
 
 /**
  * PASO 2 (revisión manual requerida)
- * polling.js llama este callback cuando
- * job.status === "manual_review".
- * El OCR no alcanzó el umbral de confianza —
- * el orientador debe revisar el resultado manualmente.
- * Se muestra la sección de resultado para que pueda
- * continuar el flujo con revisión visual.
+ * polling.js llama este callback cuando job.status === "manual_review".
+ *
+ * CONTRATOS:
+ *   - resultId: string → OCR terminó, TestResult existe, cargar resultado normal
+ *   - resultId: null   → race condition agotada o TestResult no disponible,
+ *                        saltar directo al cuestionario inteligente
+ *
+ * El cuestionario fue diseñado para operar sin datos cuantitativos —
+ * los prefills del video (pausas, ritmo, reescrituras) siempre existen
+ * porque vienen de QualitativeResult, no de TestResult.
  */
 function _onManualReview(resultId) {
   show(el.resultSection);
-  setAlert(el.resultAlert, MSG.POLLING_MANUAL_REVIEW, 'warning');
-  /* Intentar cargar el resultado parcial si existe */
+
   if (resultId) {
+    /* Caso normal: result_id llegó, cargar resultado parcial */
+    setAlert(el.resultAlert, MSG.POLLING_MANUAL_REVIEW, 'warning');
     loadResultado(resultId);
+    return;
   }
+
+  /* Caso sin result_id: el OCR no pudo leer la hoja o el TestResult
+     no está disponible aún. Informar al orientador y avanzar directo
+     al cuestionario — el sistema no se para. */
+  setAlert(
+    el.resultAlert,
+    'No se pudo leer la hoja de resultados automáticamente. ' +
+    'Completa el cuestionario de observación para continuar.',
+    'warning'
+  );
+  loadCuestionario();
 }
 
 
@@ -163,6 +183,7 @@ function _onCuestionarioDone() {
 
 
 
+
 /* ══════════════════════════════════════════════
    HEALTH CHECK
    Verifica si el backend responde.
@@ -173,6 +194,7 @@ async function _runHealthCheck() {
   const { ok } = await checkHealth();
   updateBackendDot(ok ? 'ok' : 'error');
 }
+
 
 
 
@@ -204,6 +226,7 @@ function resetAll() {
   /* Health check inmediato tras reset */
   _runHealthCheck();
 }
+
 
 
 

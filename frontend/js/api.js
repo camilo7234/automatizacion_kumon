@@ -10,7 +10,9 @@
    ============================================================ */
 
 
+
 import { ENDPOINTS } from './config.js';
+
 
 
 
@@ -54,6 +56,7 @@ async function _request(url, options = {}) {
 
 
 
+
 /* ══════════════════════════════════════════════
    HEALTH CHECK
    GET /api/v1/health
@@ -66,6 +69,7 @@ async function _request(url, options = {}) {
 export async function checkHealth() {
   return _request(ENDPOINTS.health());
 }
+
 
 
 
@@ -184,6 +188,7 @@ export function uploadVideo(file, meta = {}, onProgress = null) {
 
 
 
+
 /* ══════════════════════════════════════════════
    JOBS
    GET /api/v1/jobs/{jobId}
@@ -212,14 +217,19 @@ export async function getJob(jobId) {
 
 
 
+
 /* ══════════════════════════════════════════════
    RESULTS
-   GET /api/v1/results/job/{jobId}
+   GET /api/v1/results/job/{jobId}   — por job_id
+   GET /api/v1/results/{resultId}    — por result_id directo
    Fuente: backend/app/schemas/result.py — TestResultResponse
    ══════════════════════════════════════════════ */
 
 /**
- * Obtiene el resultado completo del análisis de video.
+ * Obtiene el resultado completo del análisis de video por job_id.
+ * Usar cuando solo se dispone del job_id y no del result_id.
+ * Endpoint: GET /api/v1/results/job/{jobId}
+ *
  * @param {string} jobId
  * @returns {{ ok: bool, data: TestResultResponse, error }}
  *
@@ -255,6 +265,25 @@ export async function getJob(jobId) {
 export async function getResult(jobId) {
   return _request(ENDPOINTS.getResult(jobId));
 }
+
+
+/**
+ * Obtiene el resultado completo por su propio result_id (UUID de TestResult).
+ * Usar cuando ya se tiene el result_id desde JobStatusResponse.result_id
+ * o desde el callback _onManualReview(resultId) de polling.js.
+ *
+ * Endpoint: GET /api/v1/results/{resultId}
+ *
+ * Distinto de getResult(jobId) que usa GET /results/job/{jobId}.
+ * Ambos retornan TestResultResponse con la misma estructura.
+ *
+ * @param {string} resultId — UUID del TestResult
+ * @returns {{ ok: bool, data: TestResultResponse, error }}
+ */
+export async function getResultById(resultId) {
+  return _request(ENDPOINTS.getResultById(resultId));
+}
+
 
 
 
@@ -318,6 +347,7 @@ export async function submitCuestionario(resultId, payload) {
     body:    JSON.stringify(payload),
   });
 }
+
 
 
 
