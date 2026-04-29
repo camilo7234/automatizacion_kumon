@@ -31,8 +31,8 @@ export const ENDPOINTS = {
   getJob:      (jobId)             => `${API_BASE}/api/v1/jobs/${jobId}`,
 
   /* ── RESULTS ── */
-  getResult:   (jobId)             => `${API_BASE}/api/v1/results/job/${jobId}`,
-
+  getResult:     (jobId)           => `${API_BASE}/api/v1/results/job/${jobId}`,
+  getResultById: (resultId)        => `${API_BASE}/api/v1/results/${resultId}`,
   /* ── CUESTIONARIO ── */
   getCuestionario:    (resultId)   => `${API_BASE}/api/v1/cuestionario/${resultId}`,
   submitCuestionario: (resultId)   => `${API_BASE}/api/v1/cuestionario/${resultId}`,
