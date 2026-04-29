@@ -322,6 +322,10 @@ def _build_combinado_block(
         return {
             "puntaje":   combined_score,
             "etiqueta":  etiqueta,
+            # BUG-04-A FIX: pasar el override para que override_note se renderice en el PDF
+            "override":  integrado.get("override"),
+            # BUG-04-B FIX: incluir formula para que _build_pdf_html no imprima None
+            "formula":   f"{round(weight_cuant * 100):.0f}% cuantitativo + {round(weight_cual * 100):.0f}% cualitativo (ajuste aplicado)",
             "kpi": {
                 "cuantitativo": {
                     "puntaje": score_cuant,
@@ -338,7 +342,6 @@ def _build_combinado_block(
     datos_incompletos = False
     if score_cuant is None or score_cual is None:
         datos_incompletos = True
-        # Calcular con lo que hay, solo si al menos uno está disponible
         if score_cuant is not None:
             combined_score = round(weight_cuant * score_cuant, 1)
         elif score_cual is not None:
@@ -362,6 +365,7 @@ def _build_combinado_block(
     return {
         "puntaje":   combined_score,
         "etiqueta":  etiqueta,
+        "formula":   f"{round(weight_cuant * 100):.0f}% cuantitativo + {round(weight_cual * 100):.0f}% cualitativo",
         "datos_incompletos": datos_incompletos,
         "kpi": {
             "cuantitativo": {
@@ -375,7 +379,6 @@ def _build_combinado_block(
         },
         "narrativa": narrative,
     }
-
 
 def _classify_combined_label(puntaje: Optional[float]) -> Optional[str]:
     """

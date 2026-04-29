@@ -799,13 +799,13 @@ def _color_semaforo(semaforo: str) -> str:
 def _color_etiqueta(etiqueta: str) -> str:
     """Mapea la etiqueta combinada a un color hex."""
     return {
-        "sobresaliente":         "#437a22",
-        "en_nivel":              "#437a22",
-        "en_desarrollo":         "#b07a00",
-        "requiere_apoyo":        "#a13544",
-        "rojo_por_flag_critico": "#a12c7b",
+        # BUG-03 FIX: vocabulario alineado a los 4 valores reales de la BD
+        # report_generator.py genera exactamente estos 4 → CheckConstraint los acepta
+        "fortaleza":    "#437a22",
+        "en_desarrollo": "#b07a00",
+        "refuerzo":     "#a13544",
+        "atencion":     "#a12c7b",
     }.get((etiqueta or "").lower(), "#7a7974")
-
 
 def _svg_gauge(pct: float, color: str, label: str) -> str:
     """
@@ -949,11 +949,11 @@ def _build_pdf_html(
 
     # ── Etiqueta display ─────────────────────────────────────────
     etiquetas_display = {
-        "sobresaliente":         "Sobresaliente",
-        "en_nivel":              "En nivel",
-        "en_desarrollo":         "En desarrollo",
-        "requiere_apoyo":        "Requiere apoyo",
-        "rojo_por_flag_critico": "Requiere seguimiento cercano",
+        # BUG-03 FIX: vocabulario alineado a los 4 valores reales de la BD
+        "fortaleza":     "Fortaleza",
+        "en_desarrollo": "En desarrollo",
+        "refuerzo":      "Requiere refuerzo",
+        "atencion":      "Requiere atención",
     }
     etq_cuan_label = etiquetas_display.get(cuan.get("etiqueta") or semaforo, semaforo.capitalize())
     etq_cual_label = etiquetas_display.get(etq_cual, etq_cual.replace("_", " ").capitalize())
@@ -1459,6 +1459,7 @@ def _build_pdf_buffer_with_reportlab(
 # GET /boletin/{result_id}/pdf
 # ──────────────────────────────────────────────────────────────
 
+
 @router.get("/boletin/{result_id}/pdf")
 def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
     """
@@ -1598,27 +1599,31 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
     )
 
-    datos = build_report_data(qnt, cual_input)
-
+    # ── BUG-02 FIX ───────────────────────────────────────────────
+    # Si el boletín NO existe aún → calcular y persistir por primera vez.
+    # Si ya existe → usar SIEMPRE los datos persistidos sin recalcular.
+    # Recalcular sobre un boletín existente sobreescribe silenciosamente
+    # las correcciones manuales aplicadas por el orientador vía PATCH.
     if not bulletin:
+        datos = build_report_data(qnt, cual_input)
         bulletin = Bulletin(
             id_result=result.id_result,
             id_template=result.id_template,
+            datos_boletin=datos,
+            puntaje_cuantitativo=datos.get("cuantitativo", {}).get("score_index"),
+            puntaje_cualitativo=total_porcentaje,
+            puntaje_combinado=datos.get("combinado", {}).get("puntaje"),
+            etiqueta_combinada=datos.get("combinado", {}).get("etiqueta"),
+            status="ready",
+            generated_at=datetime.now(timezone.utc),
         )
-
-    if bulletin.datos_boletin != datos:
-        bulletin.datos_boletin = datos
-        bulletin.puntaje_cuantitativo = datos.get("cuantitativo", {}).get("score_index")
-        bulletin.puntaje_cualitativo = total_porcentaje
-        bulletin.puntaje_combinado = datos.get("combinado", {}).get("puntaje")
-        bulletin.etiqueta_combinada = datos.get("combinado", {}).get("etiqueta")
-        bulletin.status = "ready"
-        bulletin.generated_at = datetime.now(timezone.utc)
         db.add(bulletin)
         db.commit()
         db.refresh(bulletin)
 
-    datos = bulletin.datos_boletin or datos
+    # Fuente de verdad: siempre los datos persistidos en BD
+    datos = bulletin.datos_boletin
+    # ── FIN BUG-02 FIX ───────────────────────────────────────────
 
     # ── Nombre del archivo sugerido ──────────────────────────────
     nombre_safe = (nombre_sujeto or "sin-nombre").replace("/", "-").replace("\\", "-").replace(" ", "_")
