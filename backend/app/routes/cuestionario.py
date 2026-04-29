@@ -18,7 +18,9 @@ Flujo:
      usando report_generator (65% cuant + 35% cual).
   5) Opcionalmente persiste/lee de la tabla Bulletin.
 ══════════════════════════════════════════════════════════════════
+
 """
+import copy
 import io
 from xml.sax.saxutils import escape
 from datetime import datetime, timezone
@@ -712,8 +714,7 @@ def patch_boletin(
         )
 
     # Trabajar sobre una copia mutable del JSON persistido
-    import copy
-    datos = copy.deepcopy(bulletin.datos_boletin)
+    datos = copy.deepcopy(bulletin.datos_boletin)  # ← BUG-06: import ya está arriba
 
     correcciones_aplicadas = 0
     errores: list[str] = []
@@ -722,14 +723,12 @@ def patch_boletin(
         partes = correccion.campo.split(".")
         nodo = datos
         try:
-            # Navegar hasta el penúltimo nivel
             for parte in partes[:-1]:
                 if isinstance(nodo, list):
                     nodo = nodo[int(parte)]
                 else:
                     nodo = nodo[parte]
 
-            # Aplicar el valor en el último nivel
             clave_final = partes[-1]
             if isinstance(nodo, list):
                 nodo[int(clave_final)] = correccion.valor_nuevo
@@ -746,8 +745,8 @@ def patch_boletin(
             detail=f"No se pudieron aplicar {len(errores)} corrección(es): {'; '.join(errores)}",
         )
 
-    # Registrar auditoría de quién corrigió y cuándo
-    audit = bulletin.datos_boletin.get("_auditoria_correcciones", [])
+    # BUG-05 FIX: leer auditoría desde `datos` (copia mutable), NO desde bulletin.datos_boletin
+    audit = datos.get("_auditoria_correcciones", [])
     audit.append({
         "corregido_por": payload.corregido_por,
         "corregido_at":  datetime.now(timezone.utc).isoformat(),
@@ -755,9 +754,9 @@ def patch_boletin(
     })
     datos["_auditoria_correcciones"] = audit
 
-    # Persistir — sqlalchemy necesita asignación directa para detectar el cambio en JSONB
+    # Persistir
     bulletin.datos_boletin = datos
-    bulletin.status        = "corregido"
+    bulletin.status        = "ready"   # ← BUG-01 FIX: "corregido" violaba el CHECK CONSTRAINT
     db.add(bulletin)
     db.commit()
     db.refresh(bulletin)
@@ -777,6 +776,8 @@ def patch_boletin(
         correcciones_aplicadas=correcciones_aplicadas,
         message=f"Boletín corregido por {payload.corregido_por}. {correcciones_aplicadas} campo(s) actualizados.",
     )
+
+
 
 # ──────────────────────────────────────────────────────────────
 # Helpers para generación de PDF
