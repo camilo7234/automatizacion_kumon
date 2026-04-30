@@ -32,10 +32,15 @@ from __future__ import annotations
 import io
 import logging
 import math
+import os
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
+import numpy as np
 
 from reportlab.graphics import renderPDF
 from reportlab.graphics.charts.barcharts import HorizontalBarChart
@@ -68,6 +73,13 @@ _NOMBRE_CENTRO = "Kumon Ipiales"
 # ── Ancho útil del PDF (A4 con márgenes 2cm c/lado) ──────────────
 _PAGE_W = A4[0] - 4 * cm   # ≈ 17 cm
 
+# ── Colores matplotlib para gráficas de secciones cualitativas ───
+_ETIQ_MPL_BG: Dict[str, str] = {
+    "fortaleza":     "#22C55E",
+    "en_desarrollo": "#3B82F6",
+    "refuerzo":      "#F59E0B",
+    "atencion":      "#EF4444",
+}
 
 # ══════════════════════════════════════════════════════════════════
 # [1] PALETA DE COLORES Y ESTILOS TIPOGRÁFICOS
@@ -576,12 +588,12 @@ def generate_pdf(
     report_data:       Dict[str, Any],
     job_created_at:    datetime,
     prospecto_nombre:  str,
-    output_path:       str,
+    output_path:       Optional[str] = None,
     orientador_nombre: Optional[str] = None,
     hubo_correcciones: bool = False,
-) -> Path:
+) -> "Path | io.BytesIO":
     """
-    Genera el PDF del boletín completo y lo guarda en output_path.
+    Genera el PDF del boletín completo.
 
     Parámetros
     ----------
@@ -589,19 +601,27 @@ def generate_pdf(
                         cuantitativo, cualitativo, combinado, gaze
     job_created_at    : datetime del ProcessingJob (fecha del boletín)
     prospecto_nombre  : nombre del estudiante evaluado
-    output_path       : ruta donde guardar el PDF
+    output_path       : ruta donde guardar el PDF.
+                        Si es None (por defecto), retorna io.BytesIO
+                        listo para StreamingResponse sin tocar disco.
     orientador_nombre : nombre del orientador (None si no disponible)
     hubo_correcciones : True si el orientador editó campos
 
     Retorna
     -------
-    Path del PDF generado.
+    - io.BytesIO  si output_path es None  → usar para StreamingResponse
+    - Path        si output_path se indica → compatible con uso en disco
     """
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # ── Destino: buffer en memoria o archivo en disco ─────────────
+    if output_path is None:
+        target: "str | io.BytesIO" = io.BytesIO()
+    else:
+        path = Path(output_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        target = str(path)
 
     doc = SimpleDocTemplate(
-        str(path),
+        target,
         pagesize=A4,
         leftMargin=2 * cm,
         rightMargin=2 * cm,
@@ -616,7 +636,7 @@ def generate_pdf(
     cuant = report_data.get("cuantitativo", {})
     cual  = report_data.get("cualitativo",  {})
     comb  = report_data.get("combinado",    {})
-    gaze  = report_data.get("gaze")         # reservado cámara frontal
+    gaze  = report_data.get("gaze")
 
     # ── [7] Encabezado ────────────────────────────────────────────
     story += _seccion_encabezado(
@@ -634,7 +654,7 @@ def generate_pdf(
     story.append(Spacer(1, 0.3 * cm))
 
     # ── [9] Prefills automáticos (video / audio / cámara) ─────────
-    prefills = cual.get("prefills") or {}
+    prefills   = cual.get("prefills")   or {}
     auto_flags = cual.get("auto_flags") or []
     if prefills:
         story += _seccion_prefills(styles, prefills, auto_flags)
@@ -661,7 +681,7 @@ def generate_pdf(
         story.append(HRFlowable(width="100%", thickness=0.4, color=_BORDE))
         story.append(Spacer(1, 0.3 * cm))
 
-    # ── Gaze (reservado cámara frontal — muestra si llega data) ───
+    # ── Gaze (reservado cámara frontal) ───────────────────────────
     if gaze:
         story += _seccion_gaze(styles, gaze)
         story.append(Spacer(1, 0.35 * cm))
@@ -678,9 +698,15 @@ def generate_pdf(
     story += _seccion_pie(styles, hubo_correcciones=hubo_correcciones)
 
     doc.build(story)
-    logger.info("PDF generado: %s (%.1f KB)", path, path.stat().st_size / 1024)
-    return path
 
+    # ── Retornar según modo ───────────────────────────────────────
+    if output_path is None:
+        target.seek(0)
+        logger.info("PDF generado en memoria (%.1f KB)", target.getbuffer().nbytes / 1024)
+        return target
+    else:
+        logger.info("PDF guardado en disco: %s (%.1f KB)", path, path.stat().st_size / 1024)
+        return path
 
 # ══════════════════════════════════════════════════════════════════
 # [7] SECCIÓN 1 — ENCABEZADO CON LOGO Y DATOS DEL ESTUDIANTE
@@ -739,7 +765,7 @@ def _seccion_encabezado(
     nivel_str  = _parsear_display_name(cuant)
     cod_test   = cuant.get("test_code") or "—"
     nivel_act  = cuant.get("current_level") or "—"
-    fecha_test = cuant.get("test_date") or "—"   # ISO string del backend
+    fecha_test = cuant.get("test_date") or "—"
 
     filas = [
         ["Estudiante evaluado:",  prospecto_nombre or "—"],
@@ -754,7 +780,6 @@ def _seccion_encabezado(
     if orientador_nombre:
         filas.append(["Orientador a cargo:", orientador_nombre])
 
-    n_rows = len(filas)
     tbl = Table(filas, colWidths=[5 * cm, 12 * cm])
     cmds = [
         ("BACKGROUND",    (0, 0), (-1, -1), _KUMON_AZUL_L),
@@ -767,14 +792,11 @@ def _seccion_encabezado(
         ("TOPPADDING",    (0, 0), (-1, -1), 3),
         ("LEFTPADDING",   (0, 0), (-1, -1), 8),
         ("GRID",          (0, 0), (-1, -1), 0.3, _BORDE),
-        ("ROUNDEDCORNERS", [4]),
     ]
-    # Fila de encabezado (primera fila) un poco más oscura
     cmds.append(("BACKGROUND", (0, 0), (-1, 0), _KUMON_AZUL_L))
     tbl.setStyle(TableStyle(cmds))
     elementos.append(tbl)
     return elementos
-
 
 # ══════════════════════════════════════════════════════════════════
 # [8] SECCIÓN 2 — RESULTADO CUANTITATIVO

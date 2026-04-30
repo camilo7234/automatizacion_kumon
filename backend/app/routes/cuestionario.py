@@ -28,6 +28,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from config.database import get_db
@@ -56,6 +57,8 @@ from app.services.report_generator import (
     QualitativeInput,
     build_report_data,
 )
+# ── BUG-A FIX: importar el generador visual completo ──────────────
+from app.services.pdf_generator import generate_pdf as _generate_pdf_visual
 
 router = APIRouter(prefix="/api/v1", tags=["cuestionario"])
 
@@ -948,14 +951,21 @@ def _build_pdf_html(
     gauge_comb = _svg_gauge(pct_comb, color_comb, "Puntaje combinado")
 
     # ── Etiqueta display ─────────────────────────────────────────
+    # BUG-D FIX: cuan no tiene campo "etiqueta", solo "semaforo".
+    # Se mapea semaforo directamente a un texto semántico propio
+    # del bloque cuantitativo, sin mezclar el vocabulario cualitativo.
+    _sem_label = {
+        "verde":    "Aprobado — puede avanzar",
+        "amarillo": "Debe consolidar antes de avanzar",
+        "rojo":     "Requiere refuerzo en este nivel",
+    }
     etiquetas_display = {
-        # BUG-03 FIX: vocabulario alineado a los 4 valores reales de la BD
         "fortaleza":     "Fortaleza",
         "en_desarrollo": "En desarrollo",
         "refuerzo":      "Requiere refuerzo",
         "atencion":      "Requiere atención",
     }
-    etq_cuan_label = etiquetas_display.get(cuan.get("etiqueta") or semaforo, semaforo.capitalize())
+    etq_cuan_label = _sem_label.get(semaforo, semaforo.capitalize())
     etq_cual_label = etiquetas_display.get(etq_cual, etq_cual.replace("_", " ").capitalize())
     etq_comb_label = etiquetas_display.get(etq_comb, etq_comb.replace("_", " ").capitalize())
 
@@ -1468,14 +1478,13 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
 
     Requiere que el cuestionario cualitativo esté completo.
 
-    Estrategia robusta:
-      1) Asegura que exista una versión vigente del boletín.
-      2) Intenta renderizar con WeasyPrint.
-      3) Si WeasyPrint no puede importarse o falla por dependencias nativas,
-         usa ReportLab como fallback automático.
-      4) Mantiene la misma ruta y el mismo contrato de descarga.
+    Jerarquía de renderizado:
+      1) WeasyPrint  → HTML visual idéntico al frontend (requiere GTK3 en Windows)
+      2) pdf_generator.generate_pdf() → ReportLab visual completo con gráficas Kumon
+      3) _build_pdf_buffer_with_reportlab → tabla plana (último recurso absoluto)
     """
     weasyprint_error: Exception | None = None
+    pdf_visual_error: Exception | None = None
     WeasyprintHTML = None
 
     try:
@@ -1524,8 +1533,8 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         and obs.detalle_secciones is not None
     ):
         total_porcentaje = float(obs.puntaje_cualitativo)
-        etiqueta_total = obs.etiqueta_cualitativa
-        secciones = obs.detalle_secciones
+        etiqueta_total   = obs.etiqueta_cualitativa
+        secciones        = obs.detalle_secciones
     else:
         try:
             calc = calcular_puntaje_cualitativo(
@@ -1540,13 +1549,13 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             ) from exc
 
         total_porcentaje = float(calc["total_porcentaje"])
-        etiqueta_total = calc["etiqueta_total"]
-        secciones = calc["secciones"]
+        etiqueta_total   = calc["etiqueta_total"]
+        secciones        = calc["secciones"]
 
     job = result.job
 
     # ── Obtener nombre del sujeto ────────────────────────────────
-    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
+    tipo_sujeto   = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
     nombre_sujeto = ""
     for obj in [
         getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
@@ -1599,11 +1608,7 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
     )
 
-    # ── BUG-02 FIX ───────────────────────────────────────────────
-    # Si el boletín NO existe aún → calcular y persistir por primera vez.
-    # Si ya existe → usar SIEMPRE los datos persistidos sin recalcular.
-    # Recalcular sobre un boletín existente sobreescribe silenciosamente
-    # las correcciones manuales aplicadas por el orientador vía PATCH.
+    # ── BUG-02 FIX: no recalcular si ya existe bulletin ──────────
     if not bulletin:
         datos = build_report_data(qnt, cual_input)
         bulletin = Bulletin(
@@ -1621,37 +1626,70 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(bulletin)
 
-    # Fuente de verdad: siempre los datos persistidos en BD
+    # Fuente de verdad: siempre datos persistidos en BD (con correcciones)
     datos = bulletin.datos_boletin
-    # ── FIN BUG-02 FIX ───────────────────────────────────────────
 
     # ── Nombre del archivo sugerido ──────────────────────────────
     nombre_safe = (nombre_sujeto or "sin-nombre").replace("/", "-").replace("\\", "-").replace(" ", "_")
-    ws_safe = (result.ws or "test").replace("/", "-")
-    fecha_str = str(result.test_date or "").replace("-", "") or "sin-fecha"
-    filename = f"boletin_{nombre_safe}_{ws_safe}_{fecha_str}.pdf"
+    ws_safe     = (result.ws or "test").replace("/", "-")
+    fecha_str   = str(result.test_date or "").replace("-", "") or "sin-fecha"
+    filename    = f"boletin_{nombre_safe}_{ws_safe}_{fecha_str}.pdf"
 
-    # ── Generar HTML para WeasyPrint si está disponible ──────────
-    html_str = _build_pdf_html(datos, result, template, nombre_sujeto)
+    # ── Datos extra para pdf_generator ───────────────────────────
+    job_created_at    = job.created_at if job and job.created_at else None
+    orientador_nombre = obs.completado_por or None
+    hubo_correcciones = bool(datos.get("_auditoria_correcciones"))
 
-    # ── Intentar con WeasyPrint primero ──────────────────────────
+    # ════════════════════════════════════════════════════════════
+    # CAPA 1 — WeasyPrint (HTML idéntico al frontend)
+    # ════════════════════════════════════════════════════════════
     if WeasyprintHTML is not None:
         try:
+            html_str   = _build_pdf_html(datos, result, template, nombre_sujeto)
             pdf_buffer = io.BytesIO()
             WeasyprintHTML(string=html_str).write_pdf(pdf_buffer)
             pdf_buffer.seek(0)
-
             return StreamingResponse(
                 pdf_buffer,
                 media_type="application/pdf",
                 headers={
                     "Content-Disposition": f'attachment; filename="{filename}"',
+                    "X-PDF-Engine": "weasyprint",
                 },
             )
         except Exception as exc:
             weasyprint_error = exc
 
-    # ── Fallback automático a ReportLab ──────────────────────────
+    # ════════════════════════════════════════════════════════════
+    # CAPA 2 — pdf_generator.generate_pdf() (ReportLab visual completo)
+    # BUG-A FIX: esta es la capa que estaba completamente ausente.
+    # Genera el boletín con secciones, gráficas, colores Kumon y
+    # barra de progreso — sin tocar disco (output_path=None).
+    # ════════════════════════════════════════════════════════════
+    try:
+        pdf_buffer = _generate_pdf_visual(
+            report_data=datos,
+            job_created_at=job_created_at,
+            prospecto_nombre=nombre_sujeto or "—",
+            output_path=None,
+            orientador_nombre=orientador_nombre,
+            hubo_correcciones=hubo_correcciones,
+        )
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "X-PDF-Engine": "reportlab-visual",
+            },
+        )
+    except Exception as exc:
+        pdf_visual_error = exc
+
+    # ════════════════════════════════════════════════════════════
+    # CAPA 3 — Fallback tabla plana (último recurso absoluto)
+    # Solo llega aquí si tanto WeasyPrint como pdf_generator fallan.
+    # ════════════════════════════════════════════════════════════
     try:
         pdf_buffer = _build_pdf_buffer_with_reportlab(
             datos=datos,
@@ -1659,7 +1697,6 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             template=template,
             nombre_sujeto=nombre_sujeto,
         )
-
         return StreamingResponse(
             pdf_buffer,
             media_type="application/pdf",
@@ -1669,12 +1706,13 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             },
         )
     except Exception as fallback_exc:
-        detalle_base = "No fue posible generar el PDF."
-        if weasyprint_error is not None:
-            detalle_base += f" WeasyPrint falló: {weasyprint_error!s}."
-        detalle_base += f" Fallback ReportLab falló: {fallback_exc!s}."
-
+        detalle = "No fue posible generar el PDF."
+        if weasyprint_error:
+            detalle += f" WeasyPrint: {weasyprint_error!s}."
+        if pdf_visual_error:
+            detalle += f" PDF visual: {pdf_visual_error!s}."
+        detalle += f" Fallback: {fallback_exc!s}."
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=detalle_base,
+            detail=detalle,
         )
