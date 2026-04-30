@@ -199,7 +199,7 @@ def ejecutar_pipeline(job_id: UUID) -> None:
                     cv2.imwrite("debug_summary_frame.jpg", video_result.summary_frame)
                     logger.debug("Frame de resumen guardado como debug_summary_frame.jpg")
 
-                ocr_result = extract_summary_frame(video_result.summary_frame)
+                ocr_result = extract_summary_frame(video_result.summary_frame, template=template)
 
                 if ocr_result is not None:
                     logger.info(

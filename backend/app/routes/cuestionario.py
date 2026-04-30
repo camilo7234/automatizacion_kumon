@@ -174,22 +174,28 @@ def _merge_prefills(
             if valor is None:
                 continue
 
-            for item_id in METRICA_A_ITEMS.get(metrica, []):
-                if items_del_cuestionario and item_id not in items_del_cuestionario:
-                    continue
-                try:
-                    item_acumulado.setdefault(item_id, []).append(float(valor))
-                    item_confianza.setdefault(item_id, []).append(confianza)
-                    item_fuente[item_id] = fuente
-                except (TypeError, ValueError):
-                    continue
+        for item_id in METRICA_A_ITEMS.get(metrica, []):
+            if items_del_cuestionario and item_id not in items_del_cuestionario:
+                continue
+            # BUG-1 FIX: convertir a float ANTES de setdefault para evitar
+            # que se cree una lista vacía si la conversión falla.
+            try:
+                valor_f    = float(valor)
+                confianza_f = float(confianza)
+            except (TypeError, ValueError):
+                continue
+            item_acumulado.setdefault(item_id, []).append(valor_f)
+            item_confianza.setdefault(item_id, []).append(confianza_f)
+            item_fuente[item_id] = fuente
 
-        for item_id, valores in item_acumulado.items():
-            merged[item_id] = {
-                "valor": round(sum(valores) / len(valores), 2),
-                "confianza": round(sum(item_confianza[item_id]) / len(item_confianza[item_id]), 3),
-                "fuente": item_fuente.get(item_id, "sistema"),
-            }
+    for item_id, valores in item_acumulado.items():
+        if not valores:   # guardia defensiva extra
+            continue
+        merged[item_id] = {
+            "valor": round(sum(valores) / len(valores), 2),
+            "confianza": round(sum(item_confianza[item_id]) / len(item_confianza[item_id]), 3),
+            "fuente": item_fuente.get(item_id, "sistema"),
+        }        
 
     # ── Respuestas guardadas del orientador (prioridad) ──
     if obs and obs.respuestas:
@@ -250,9 +256,20 @@ def _build_final_respuestas(
             if not isinstance(data, dict):
                 continue
             valor = data.get("valor")
-            confianza = float(data.get("confianza", 0.0))
+            confianza = data.get("confianza", 0.0)
             if valor is None:
                 continue
+
+            # BUG-1 FIX: convertir a float ANTES de setdefault.
+            # El patrón anterior llamaba setdefault (creando la lista vacía)
+            # y luego float() dentro del try. Si float() fallaba, el except
+            # capturaba la excepción pero la lista vacía ya estaba registrada
+            # en item_acumulado, causando ZeroDivisionError en el loop inferior.
+            try:
+                valor_f     = float(valor)
+                confianza_f = float(confianza)
+            except (TypeError, ValueError):
+                continue  # valor no convertible → saltar métrica completa
 
             # Obtener los items que mapea esta métrica
             items_metrica = METRICA_A_ITEMS.get(metrica, [])
@@ -261,19 +278,19 @@ def _build_final_respuestas(
                 # Solo inyectar items que existen en ESTE cuestionario
                 if items_del_cuestionario and item_id not in items_del_cuestionario:
                     continue
-                try:
-                    item_acumulado.setdefault(item_id, []).append(float(valor))
-                    item_confianza.setdefault(item_id, []).append(confianza)
-                except (TypeError, ValueError):
-                    continue
+                item_acumulado.setdefault(item_id, []).append(valor_f)
+                item_confianza.setdefault(item_id, []).append(confianza_f)
 
         # Promediar y guardar
         for item_id, valores in item_acumulado.items():
-            valor_promedio = sum(valores) / len(valores)
-            confianza_promedio = sum(item_confianza[item_id]) / len(item_confianza[item_id])
+            if not valores:  # guardia defensiva: nunca debería pasar con el fix anterior
+                continue
+            confianzas = item_confianza[item_id]
+            valor_promedio     = sum(valores)    / len(valores)
+            confianza_promedio = sum(confianzas) / len(confianzas)
             final_respuestas[item_id] = {
-                "valor": round(valor_promedio, 2),
-                "fuente": "sistema",
+                "valor":     round(valor_promedio, 2),
+                "fuente":    "sistema",
                 "corregido": False,
                 "confianza": round(confianza_promedio, 3),
             }
@@ -282,8 +299,8 @@ def _build_final_respuestas(
     for key, value in (payload_respuestas or {}).items():
         valor = value.get("valor") if isinstance(value, dict) and "valor" in value else value
         final_respuestas[key] = {
-            "valor": valor,
-            "fuente": "orientador",
+            "valor":     valor,
+            "fuente":    "orientador",
             "corregido": bool(
                 qual
                 and key in (qual.auto_captured_flags or [])
@@ -785,10 +802,6 @@ def patch_boletin(
 # ──────────────────────────────────────────────────────────────
 # Helpers para generación de PDF
 # ──────────────────────────────────────────────────────────────
-
-import io
-from fastapi.responses import StreamingResponse
-
 
 def _color_semaforo(semaforo: str) -> str:
     """Mapea el semáforo cuantitativo a un color hex."""

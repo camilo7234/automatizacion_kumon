@@ -582,21 +582,166 @@ def _exclude_bottom_strip(roi: np.ndarray, pct: float = 0.08) -> np.ndarray:
 
 
 # ══════════════════════════════════════════════════════════════════
+# POST-PROCESAMIENTO CON CONTEXTO DEL TEMPLATE
+# ══════════════════════════════════════════════════════════════════
+
+def _apply_template_context(
+    result: OCRExtractionResult,
+    template,  # Optional[TestTemplate] — sin import directo (evita ciclo)
+) -> None:
+    """
+    Valida, corrige y complementa los campos OCR usando el TestTemplate
+    como fuente de verdad del nivel activo.
+
+    Responsabilidades (en orden de ejecución):
+      1. target_time_min  → fallback desde template.time_pattern_min
+                            cuando el OCR no lo detectó en el frame.
+      2. total_questions  → corrección desde template.total_items
+                            cuando el OCR leyó el denominador mal.
+                            Recalcula percentage si aplica.
+      3. correct_answers  → invalida si excede template.total_items
+                            (artefacto OCR — frame incorrecto).
+      4. ws               → cross-validación contra template.code
+                            para detectar nivel inesperado sin sobreescribir.
+
+    INVARIANTE: nunca elimina un campo que el OCR extrajo correctamente.
+    Solo corrige denominadores erróneos, inyecta fallbacks y registra
+    discrepancias para que el orientador pueda revisarlas.
+    """
+    if template is None:
+        return
+
+    # ── 1. target_time_min: fallback desde template ───────────────
+    # Si el OCR no encontró el Target Time en el frame, el valor
+    # configurado en el template para este nivel es de alta confianza
+    # (lo introdujo el administrador, no se infiere del video).
+    if result.target_time_min is None and template.time_pattern_min is not None:
+        try:
+            result.target_time_min = float(template.time_pattern_min)
+            result.field_confidences["target_time"] = 0.90
+            logger.info(
+                "target_time_min inyectado desde template: "
+                "%.1f min (template.code=%s)",
+                result.target_time_min, template.code,
+            )
+        except (TypeError, ValueError):
+            logger.warning(
+                "template.time_pattern_min no convertible a float: %r",
+                template.time_pattern_min,
+            )
+
+    # ── 2. total_questions: corrección desde template.total_items ─
+    # El denominador del score (ej: "37/50") es el campo más propenso
+    # a errores de OCR (dígitos finales omitidos: "37/5").
+    # template.total_items es la verdad absoluta del nivel.
+    if template.total_items is not None and int(template.total_items) > 0:
+        expected_total = int(template.total_items)
+
+        if result.total_questions is None:
+            # OCR no encontró el denominador en absoluto
+            result.total_questions = expected_total
+            logger.info(
+                "total_questions inyectado desde template: %d (template.code=%s)",
+                expected_total, template.code,
+            )
+            if result.correct_answers is not None:
+                result.percentage = round(
+                    result.correct_answers / expected_total * 100, 2
+                )
+                logger.info("percentage recalculado: %.2f%%", result.percentage)
+
+        elif result.total_questions != expected_total:
+            ocr_total = result.total_questions
+            result.total_questions = expected_total
+            if result.correct_answers is not None:
+                result.percentage = round(
+                    result.correct_answers / expected_total * 100, 2
+                )
+            logger.warning(
+                "total_questions corregido: OCR=%d → template=%d "
+                "(template.code=%s) | percentage recalculado=%.2f%%",
+                ocr_total, expected_total, template.code,
+                result.percentage if result.percentage is not None else -1.0,
+            )
+
+    # ── 3. correct_answers: invalidar si es imposible ─────────────
+    # Un alumno no puede tener más respuestas correctas que preguntas
+    # totales del nivel. Si ocurre, el OCR leyó basura (superposición
+    # de celdas, reflejo o frame de otra sesión).
+    if (
+        result.correct_answers is not None
+        and template.total_items is not None
+        and result.correct_answers > int(template.total_items)
+    ):
+        logger.error(
+            "correct_answers=%d excede total_items=%d — "
+            "invalidando campo (artefacto OCR).",
+            result.correct_answers, template.total_items,
+        )
+        result.correct_answers = None
+        result.percentage      = None
+        result.field_confidences.pop("score", None)
+
+    # ── 4. ws: cross-validación contra template.code ──────────────
+    # Si el nivel OCR difiere del template, es posible que el video
+    # sea de otro alumno o nivel. NO se sobreescribe: si el alumno
+    # realmente cambió de nivel, el orientador debe saberlo.
+    # Solo se reduce la confianza del campo para que impacte la
+    # confianza global y active needs_manual_review si corresponde.
+    if result.ws is not None and template.code:
+        expected_ws = template.code.upper().strip()
+        detected_ws = result.ws.upper().strip()
+        if detected_ws != expected_ws:
+            logger.warning(
+                "WS detectado '%s' difiere del template '%s' — "
+                "posible frame de nivel incorrecto (se mantiene para revisión).",
+                detected_ws, expected_ws,
+            )
+            if "ws" in result.field_confidences:
+                result.field_confidences["ws"] = round(
+                    result.field_confidences["ws"] * 0.50, 4
+                )
+
+
+# ══════════════════════════════════════════════════════════════════
 # FUNCIÓN PRINCIPAL OCR (CRÍTICA)
 # ══════════════════════════════════════════════════════════════════
 
-def extract_summary_frame(frame: np.ndarray) -> OCRExtractionResult:
+def extract_summary_frame(
+    frame: np.ndarray,
+    template=None,  # Optional[TestTemplate] — parámetro sin type-hint directo
+                    # para no crear un import circular con database.models.
+) -> OCRExtractionResult:
+    """
+    Extrae los datos del frame de resumen de Class Navi.
 
+    Args:
+        frame:    Frame BGR capturado por video_processor en el instante
+                  en que Class Navi muestra la pantalla de resultados.
+        template: TestTemplate activo del job. Altamente recomendado:
+                  permite validar y completar los campos que el OCR no
+                  detectó usando los valores configurados para el nivel
+                  (total_items, time_pattern_min, code).
+                  Si es None, se ejecuta en modo ciego (comportamiento
+                  anterior, sin validaciones cruzadas de nivel).
+
+    Returns:
+        OCRExtractionResult con campos extraídos, validados con el nivel
+        y confianza calculada en contexto del template.
+    """
     result = OCRExtractionResult()
 
     try:
         reader = get_ocr_reader()
 
-        h, w = frame.shape[:2]
+        h, w = frame.shape[:2]  # noqa: F841 — reservados para lógica de escala futura
 
         orange_bbox = _find_orange_region(frame)
-        roi = _detect_table_contour(frame, orange_bbox)
-        logger.info(f"ROI dinámica: orange_bbox={orange_bbox} | tabla_detectada={roi is not None}")
+        roi         = _detect_table_contour(frame, orange_bbox)
+        logger.info(
+            "ROI dinámica: orange_bbox=%s | tabla_detectada=%s",
+            orange_bbox, roi is not None,
+        )
 
         if roi is None or roi.size == 0:
             logger.warning("Contorno de tabla no detectado — usando fallback ROI relativo.")
@@ -613,24 +758,31 @@ def extract_summary_frame(frame: np.ndarray) -> OCRExtractionResult:
         result.raw_text = [(text, conf) for (_, text, conf) in raw]
 
         # 🔥 DEBUG CRÍTICO (NO QUITAR)
-        logger.warning(f"OCR RAW DETECTADO: {result.raw_text}")
+        logger.warning("OCR RAW DETECTADO: %s", result.raw_text)
 
         full_text = " ".join(text for (_, text, _) in raw)
 
+        # ── Extracción campo a campo (orden de dependencia) ───────
         _extract_ws(raw, result)
         _extract_times(raw, result, full_text)
         _extract_score(raw, result, full_text)
         _extract_date(raw, result, full_text)
         _extract_group(raw, result, full_text)
 
-        result.confidence_score = _calculate_confidence(result)
+        # ── Post-procesamiento con contexto del nivel ─────────────
+        # CRÍTICO: debe ejecutarse ANTES de _calculate_confidence
+        # para que los campos ya validados/corregidos contribuyan
+        # con los valores correctos al score de confianza global.
+        _apply_template_context(result, template)
+
+        result.confidence_score    = _calculate_confidence(result, template)
         result.needs_manual_review = (
             result.confidence_score < settings.OCR_CONFIDENCE_MIN
         )
 
     except Exception as e:
-        logger.error(f"Error en OCR del frame de resumen: {e}")
-        result.confidence_score = 0.0
+        logger.error("Error en OCR del frame de resumen: %s", e, exc_info=True)
+        result.confidence_score    = 0.0
         result.needs_manual_review = True
 
     return result
@@ -640,18 +792,29 @@ def extract_summary_frame(frame: np.ndarray) -> OCRExtractionResult:
 # Cálculo de confianza global
 # ══════════════════════════════════════════════════════════════════
 
-def _calculate_confidence(result: OCRExtractionResult) -> float:
+def _calculate_confidence(
+    result: OCRExtractionResult,
+    template=None,  # Optional[TestTemplate]
+) -> float:
     """
     Calcula el confidence_score global como promedio ponderado
     de los campos clave extraídos.
 
-    Pesos por importancia pedagógica:
+    Pesos por importancia pedagógica (invariantes Kumon):
       score/percentage → 35%
       study_time       → 25%
       target_time      → 20%
       ws               → 10%
       test_date        → 5%
       group            → 5%
+
+    Penalizaciones por campos críticos ausentes:
+      sin score Y sin percentage  → ×0.50
+      sin study_time              → ×0.80
+
+    Bonificaciones por coherencia con el template (solo si disponible):
+      correct_answers en [0, total_items]         → +0.05
+      target_time dentro de ±1 min del template   → +0.03
     """
     weights = {
         "score":       0.35,
@@ -668,7 +831,7 @@ def _calculate_confidence(result: OCRExtractionResult) -> float:
 
     for field, weight in weights.items():
         if field in result.field_confidences:
-            confidence = result.field_confidences[field]
+            confidence    = result.field_confidences[field]
             weighted_sum += confidence * weight
             total_weight += weight
 
@@ -677,10 +840,36 @@ def _calculate_confidence(result: OCRExtractionResult) -> float:
 
     raw_score = weighted_sum / total_weight
 
+    # ── Penalizaciones por campos críticos faltantes ──────────────
     if result.correct_answers is None and result.percentage is None:
         raw_score *= 0.5
     if result.study_time_min is None:
         raw_score *= 0.8
+
+    # ── Bonificaciones por coherencia con el template ─────────────
+    if template is not None:
+        # Bonus: correct_answers dentro del rango válido del nivel
+        if (
+            result.correct_answers is not None
+            and template.total_items is not None
+            and 0 <= result.correct_answers <= int(template.total_items)
+        ):
+            raw_score = min(raw_score + 0.05, 1.0)
+
+        # Bonus: target_time coincide con el tiempo configurado (±1 min)
+        if (
+            result.target_time_min is not None
+            and template.time_pattern_min is not None
+        ):
+            try:
+                diff = abs(
+                    float(result.target_time_min)
+                    - float(template.time_pattern_min)
+                )
+                if diff <= 1.0:
+                    raw_score = min(raw_score + 0.03, 1.0)
+            except (TypeError, ValueError):
+                pass
 
     # NOTA: sin coma al final — la coma convertiría el float en una
     # tupla (0.313,) rompiendo la comparación con OCR_CONFIDENCE_MIN.
