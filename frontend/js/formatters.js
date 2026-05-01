@@ -331,11 +331,13 @@ export function confidenceDotClass(score) {
  * confidenceLabel(0.92) → "92% confianza"
  * confidenceLabel(null) → "Sin datos"
  */
+// Después — lenguaje del orientador
 export function confidenceLabel(score) {
-  if (score === null || score === undefined) return 'Sin datos';
-  return `${Math.round(score * 100)}% confianza`;
+  if (score === null || score === undefined) return 'No disponible';
+  if (score >= 0.75) return 'Lectura correcta';
+  if (score >= 0.50) return 'Lectura parcial — verificar';
+  return 'No se pudo leer — revisar manualmente';
 }
-
 
 
 

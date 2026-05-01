@@ -362,7 +362,7 @@ def _calculate_standard(
         result.needs_manual_review = True
         result.review_reasons.append("Sin score del OCR: ni aciertos ni porcentaje.")
         result.semaforo       = None
-        result.recommendation = "Revisar manualmente: OCR no extrajo resultado."
+        result.recommendation = "Revisar manualmente: Valores cuantitativos no disponibles."
         return
 
     if not level_rules or "zonas" not in level_rules:

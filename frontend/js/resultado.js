@@ -146,15 +146,14 @@ function _renderManualReviewBanner(data) {
     el.manualReviewBanner.innerHTML = `
       <span class="banner-icon">⚠️</span>
       <span>
-        <strong>Revisión manual recomendada.</strong>
-        La confianza del OCR fue
-        <strong>${confidenceLabel(score)}</strong>.
-        Verifica los valores antes de generar el boletín.
+        <strong>Revisión necesaria.</strong>
+        El video no se pudo leer con claridad suficiente
+        (<strong>${confidenceLabel(score)}</strong>).
+        Completa el formulario y ajusta los valores antes de generar el boletín.
       </span>
     `;
   }
 }
-
 
 
 /* ══════════════════════════════════════════════
