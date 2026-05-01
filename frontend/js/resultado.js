@@ -176,48 +176,66 @@ function _renderSemaforo(data) {
 
 
 /* ══════════════════════════════════════════════
-   KPIs — grid de métricas principales
-   Solo muestra las 6 métricas requeridas:
-   materia, nivel, tiempos con decimal,
-   aciertos y porcentaje.
+   KPIs — tarjetas esenciales para el orientador
+   Solo muestra lo que el orientador necesita
+   saber inmediatamente tras procesar el video.
+   _renderDetails queda vacío: toda la info
+   relevante vive aquí. El detalle completo
+   va en el boletín.
    ══════════════════════════════════════════════ */
 function _renderKpis(data) {
   if (!el.kpiGrid) return;
 
-  const pct        = data.percentage      != null ? parseFloat(data.percentage)      : null;
   const studyTime  = data.study_time_min  != null ? parseFloat(data.study_time_min)  : null;
   const targetTime = data.target_time_min != null ? parseFloat(data.target_time_min) : null;
 
+  // Tiempo: muestra lo que haya — si OCR no leyó el real, muestra "? / 15 min"
+  const tiempoValue = (() => {
+    const real = studyTime  != null ? `${formatDecimal(studyTime,  1)} min` : '?';
+    const obj  = targetTime != null ? `${formatDecimal(targetTime, 1)} min` : '?';
+    if (studyTime == null && targetTime == null) return '—';
+    return `${real} / ${obj}`;
+  })();
+
+  // Aciertos: muestra "— / 30" cuando OCR no leyó los aciertos pero el template sí tiene el total
+  const aciertosValue = (() => {
+    const correctos = data.correct_answers != null ? data.correct_answers : '—';
+    const total     = data.total_questions != null ? data.total_questions : '—';
+    if (correctos === '—' && total === '—') return '—';
+    return `${correctos} / ${total}`;
+  })();
+
+  // Punto de inicio: traducir valores técnicos a lenguaje del orientador
+  const spValue = _formatStartingPoint(data.starting_point ?? null);
+
+  // Semáforo en texto legible
+  const semaforoValue = _formatSemaforoLabel(data.semaforo);
+
   const kpis = [
     {
-      label: 'Materia',
-      value: data.subject ?? '—',
-      icon:  '📚',
-    },
-    {
-      label: 'Nivel de prueba',
-      value: data.ws ?? '—',
       icon:  '🎓',
+      label: 'Nivel evaluado',
+      value: data.display_name ?? data.current_level ?? '—',
     },
     {
-      label: 'Tiempo de estudio (min)',
-      value: formatDecimal(studyTime, 2),
+      icon:  '🚦',
+      label: 'Resultado',
+      value: semaforoValue,
+    },
+    {
+      icon:  '⭐',
+      label: 'Punto de inicio',
+      value: spValue,
+    },
+    {
       icon:  '⏱',
+      label: 'Tiempo (real / objetivo)',
+      value: tiempoValue,
     },
     {
-      label: 'Tiempo objetivo (min)',
-      value: formatDecimal(targetTime, 2),
-      icon:  '🎯',
-    },
-    {
-      label: 'Aciertos / Total',
-      value: formatFraction(data.correct_answers, data.total_questions),
       icon:  '✅',
-    },
-    {
-      label: 'Porcentaje',
-      value: formatPercent(pct),
-      icon:  '📊',
+      label: 'Aciertos',
+      value: aciertosValue,
     },
   ];
 
@@ -229,6 +247,27 @@ function _renderKpis(data) {
     </div>
   `).join('');
 }
+
+// Convierte el semáforo interno en texto legible para el orientador
+function _formatSemaforoLabel(semaforo) {
+  if (!semaforo) return '—';
+  const map = {
+    verde:    '✅ Puede avanzar',
+    amarillo: '⚠️ Necesita refuerzo',
+    rojo:     '🔴 Requiere atención',
+  };
+  return map[semaforo.toLowerCase()] ?? semaforo;
+}
+
+// Convierte el starting_point técnico en texto legible para el orientador
+function _formatStartingPoint(sp) {
+  if (!sp) return '—';
+  if (sp === 'nivel_actual')  return 'Inicio del nivel actual';
+  if (sp === 'test_superior') return 'Aplicar test nivel superior';
+  if (sp === 'test_inferior') return 'Aplicar test nivel inferior';
+  return sp; // ej: "4A 1", "K1 21" — ya son legibles
+}
+
 function _percentTone(pct) {
   if (pct === null || pct === undefined) return 'neutral';
   if (pct >= 80) return 'success';
@@ -245,45 +284,16 @@ function _fractionTone(correct, total) {
 }
 
 
-
 /* ══════════════════════════════════════════════
-   DETALLES — tabla expandida
-   Incluye todos los campos relevantes de
-   TestResultResponse para el orientador.
+   DETALLES — desactivado intencionalmente.
+   Toda la información relevante para el
+   orientador vive en _renderKpis.
+   El detalle completo (confianza OCR, tipo de
+   sujeto, códigos internos) va en el boletín.
    ══════════════════════════════════════════════ */
 function _renderDetails(data) {
   if (!el.detailsGrid) return;
-
-  /* Normalizar Decimals */
-  const pct        = data.percentage      !== null ? parseFloat(data.percentage)      : null;
-  const studyTime  = data.study_time_min  !== null ? parseFloat(data.study_time_min)  : null;
-  const targetTime = data.target_time_min !== null ? parseFloat(data.target_time_min) : null;
-  const confScore  = data.confidence_score !== null && data.confidence_score !== undefined
-    ? parseFloat(data.confidence_score) : null;
-
-  const rows = [
-    { label: 'Prueba',              value: data.display_name      ?? '—' },
-    { label: 'Materia',             value: data.subject           ?? '—' },
-    { label: 'Código',              value: data.test_code         ?? '—' },
-    { label: 'Tipo de sujeto',      value: _formatTipoSujeto(data.tipo_sujeto) },
-    { label: 'Nivel WS',            value: data.ws                ?? '—' },
-    { label: 'Nivel actual',        value: data.current_level     ?? '—' },
-    { label: 'Punto de inicio',     value: data.starting_point    ?? '—' },
-    { label: 'Tiempo de estudio',   value: formatMinutes(studyTime) },
-    { label: 'Tiempo objetivo',     value: formatMinutes(targetTime) },
-    { label: 'Aciertos / Total',    value: formatFraction(data.correct_answers, data.total_questions) },
-    { label: 'Porcentaje',          value: formatPercent(pct) },
-    { label: 'Confianza OCR',       value: confidenceLabel(confScore) },
-    { label: 'Revisión manual',
-      value: data.needs_manual_review ? '⚠️ Sí' : '✅ No' },
-  ];
-
-  el.detailsGrid.innerHTML = rows.map(r => `
-    <div class="detail-row">
-      <span class="detail-label">${_escapeHtml(r.label)}</span>
-      <span class="detail-value">${_escapeHtml(String(r.value))}</span>
-    </div>
-  `).join('');
+  el.detailsGrid.innerHTML = '';
 }
 
 function _formatTipoSujeto(tipo) {
@@ -291,8 +301,6 @@ function _formatTipoSujeto(tipo) {
   const map = { prospecto: 'Prospecto', estudiante: 'Estudiante' };
   return map[tipo.toLowerCase()] ?? tipo;
 }
-
-
 
 /* ══════════════════════════════════════════════
    RECOMENDACIÓN
