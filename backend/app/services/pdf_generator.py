@@ -584,7 +584,7 @@ def _grafica_arco_combinado(
 
 def generate_pdf(
     report_data:       Dict[str, Any],
-    job_created_at:    datetime,
+    job_created_at:    Optional[datetime],          # CORREGIDO: Optional — puede llegar None
     prospecto_nombre:  str,
     output_path:       Optional[str] = None,
     orientador_nombre: Optional[str] = None,
@@ -597,8 +597,10 @@ def generate_pdf(
     ----------
     report_data       : dict de build_report_data() con claves:
                         cuantitativo, cualitativo, combinado, gaze
-    job_created_at    : datetime del ProcessingJob (fecha del boletín)
-    prospecto_nombre  : nombre del estudiante evaluado
+    job_created_at    : datetime del ProcessingJob (fecha del boletín).
+                        Puede ser None si el job no tiene created_at.
+    prospecto_nombre  : nombre del estudiante evaluado.
+                        Si llega vacío, se toma de report_data.cuantitativo.nombre_sujeto
     output_path       : ruta donde guardar el PDF.
                         Si es None (por defecto), retorna io.BytesIO
                         listo para StreamingResponse sin tocar disco.
@@ -631,14 +633,22 @@ def generate_pdf(
     story: List[Any] = []
 
     # Extraer bloques del report_data
-    cuant = report_data.get("cuantitativo", {})
-    cual  = report_data.get("cualitativo",  {})
-    comb  = report_data.get("combinado",    {})
+    cuant = report_data.get("cuantitativo", {}) or {}
+    cual  = report_data.get("cualitativo",  {}) or {}
+    comb  = report_data.get("combinado",    {}) or {}
     gaze  = report_data.get("gaze")
+
+    # ── Fuente primaria del nombre: datos persistidos en BD ───────
+    # Si el caller pasa vacío, usamos lo que guardó build_report_data.
+    nombre_resuelto: str = (
+        prospecto_nombre
+        or cuant.get("nombre_sujeto")
+        or "—"
+    )
 
     # ── [7] Encabezado ────────────────────────────────────────────
     story += _seccion_encabezado(
-        styles, prospecto_nombre, job_created_at,
+        styles, nombre_resuelto, job_created_at,
         cuant, orientador_nombre,
     )
     story.append(Spacer(1, 0.3 * cm))
@@ -706,16 +716,18 @@ def generate_pdf(
         logger.info("PDF guardado en disco: %s (%.1f KB)", path, path.stat().st_size / 1024)
         return path
 
+
 # ══════════════════════════════════════════════════════════════════
 # [7] SECCIÓN 1 — ENCABEZADO CON LOGO Y DATOS DEL ESTUDIANTE
 #     Datos usados: subject, display_name, ws, test_code,
-#                   test_date, current_level
+#                   test_date, current_level, starting_point,
+#                   nombre_sujeto (fallback interno)
 # ══════════════════════════════════════════════════════════════════
 
 def _seccion_encabezado(
     styles:            Dict,
     prospecto_nombre:  str,
-    job_created_at:    datetime,
+    job_created_at:    Optional[datetime],          # CORREGIDO: Optional
     cuant:             Dict[str, Any],
     orientador_nombre: Optional[str],
 ) -> list:
@@ -724,11 +736,21 @@ def _seccion_encabezado(
     luego tabla de datos del estudiante con fondo azul claro.
 
     Campos usados de cuant:
-      subject, display_name, ws, test_code, current_level
+      subject, display_name, ws, test_code, current_level,
+      starting_point, nombre_sujeto (fallback si prospecto_nombre vacío)
     """
     _LOGO_ANCHO = 3.5 * cm
     _LOGO_ALTO  = 2.0 * cm
     elementos   = []
+
+    # ── Resolución definitiva del nombre ─────────────────────────
+    # Fuente 1: parámetro del caller (ya resuelto en generate_pdf)
+    # Fuente 2: campo persistido en datos_boletin.cuantitativo
+    nombre_final: str = (
+        prospecto_nombre
+        or cuant.get("nombre_sujeto")
+        or "—"
+    )
 
     # ── Logo + bloque título ──────────────────────────────────────
     logo_path_abs = os.path.abspath(_LOGO_PATH)
@@ -749,29 +771,32 @@ def _seccion_encabezado(
 
     enc_tbl = Table([[logo_cell, titulo_cell]], colWidths=[4 * cm, 13 * cm])
     enc_tbl.setStyle(TableStyle([
-        ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-        ("ALIGN",       (1, 0), (1, 0),   "CENTER"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING",(0, 0), (-1, -1), 0),
+        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN",        (1, 0), (1,  0),  "CENTER"),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
     ]))
     elementos.append(enc_tbl)
     elementos.append(Spacer(1, 0.3 * cm))
 
     # ── Tabla de datos del estudiante ────────────────────────────
-    fecha_str  = job_created_at.strftime("%d de %B de %Y") if job_created_at else "—"
-    materia    = (cuant.get("subject") or "").capitalize() or "—"
-    nivel_str  = _parsear_display_name(cuant)
-    cod_test   = cuant.get("test_code") or "—"
-    nivel_act  = cuant.get("current_level") or "—"
-    fecha_test = cuant.get("test_date") or "—"
+    fecha_str   = job_created_at.strftime("%d de %B de %Y") if job_created_at else "—"
+    materia     = (cuant.get("subject") or "").capitalize() or "—"
+    nivel_str   = _parsear_display_name(cuant)
+    cod_test    = cuant.get("test_code")      or "—"
+    nivel_act   = cuant.get("current_level")  or "—"
+    fecha_test  = cuant.get("test_date")      or "—"
+    ws          = cuant.get("ws")             or "—"
+    punto_ini   = _parsear_starting_point(cuant.get("starting_point"))
 
     filas = [
-        ["Estudiante evaluado:",  prospecto_nombre or "—"],
-        ["Fecha de evaluación:",  fecha_str],
-        ["Materia:",              materia],
-        ["Nivel evaluado:",       nivel_str],
-        ["Código de test:",       cod_test],
-        ["Nivel actual:",         nivel_act],
+        ["Estudiante evaluado:",   nombre_final],
+        ["Fecha de evaluación:",   fecha_str],
+        ["Materia:",               materia],
+        ["Nivel evaluado (WS):",   f"{nivel_str}  ·  WS: {ws}"],     # AÑADIDO: WS destacado
+        ["Código de test:",        cod_test],
+        ["Nivel actual:",          nivel_act],
+        ["Punto de inicio:",       punto_ini],                        # AÑADIDO: visible en encabezado
     ]
     if fecha_test and fecha_test != "—":
         filas.append(["Fecha del test (BD):", str(fecha_test)])
@@ -790,8 +815,12 @@ def _seccion_encabezado(
         ("TOPPADDING",    (0, 0), (-1, -1), 3),
         ("LEFTPADDING",   (0, 0), (-1, -1), 8),
         ("GRID",          (0, 0), (-1, -1), 0.3, _BORDE),
+        # Fila 0 (nombre del estudiante) con fondo más destacado
+        ("BACKGROUND",    (0, 0), (-1, 0),  _KUMON_AZUL_M),
+        ("TEXTCOLOR",     (0, 0), (-1, 0),  _BLANCO),
+        ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0, 0), (-1, 0),  10.5),
     ]
-    cmds.append(("BACKGROUND", (0, 0), (-1, 0), _KUMON_AZUL_L))
     tbl.setStyle(TableStyle(cmds))
     elementos.append(tbl)
     return elementos
