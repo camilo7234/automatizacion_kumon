@@ -424,7 +424,12 @@ def ejecutar_pipeline(job_id: UUID) -> None:
             tipo_sujeto=tipo_sujeto,
 
             # Datos OCR de Class Navi
-            ws=ocr_result.ws if ocr_result else None,
+            # CORRECCIÓN: ws usa el código del template como fallback cuando
+            # el OCR no pudo leerlo. El orientador ya eligió el nivel al inicio.
+            ws=(
+                (ocr_result.ws if ocr_result else None)
+                or template.code
+            ),
             test_date=(
                 job.created_at.date()
                 if job.created_at
@@ -445,7 +450,16 @@ def ejecutar_pipeline(job_id: UUID) -> None:
             ),
 
             # Cálculos del backend (cuantitativo)
-            current_level=calc.current_level,
+            # CORRECCIÓN: si el OCR no calculó el nivel, se usa el nombre
+            # legible del template (display_name) y como último recurso el
+            # código corto (code). El orientador ya seleccionó este nivel
+            # en el formulario inicial — nunca debe quedar vacío.
+            current_level=(
+                calc.current_level
+                or template.display_name
+                or template.code
+                or None
+            ),
             starting_point=calc.starting_point,
             semaforo=calc.semaforo,
             recommendation=calc.recommendation,
@@ -492,6 +506,7 @@ def ejecutar_pipeline(job_id: UUID) -> None:
             processing_ms=video_result.processing_ms,
         )
         db.add(qual_db)
+
 
         # ──────────────────────────────────────────────────────────
         # PASO 10: Actualizar job con el resultado final

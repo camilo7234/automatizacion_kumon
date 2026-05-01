@@ -120,8 +120,6 @@ def _sanitize_decimals(obj: Any) -> Any:
 # ══════════════════════════════════════════════════════════════════
 # FUNCIÓN PRINCIPAL
 # ══════════════════════════════════════════════════════════════════
-
-
 def build_report_data(
     cuantitativo: QuantitativeInput,
     cualitativo:  QualitativeInput,
@@ -148,6 +146,8 @@ def build_report_data(
         "combinado":    comb_block,
         "gaze":         gaze_block,
     })
+
+
 # ══════════════════════════════════════════════════════════════════
 # Helpers internos
 # ══════════════════════════════════════════════════════════════════
