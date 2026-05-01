@@ -917,8 +917,6 @@ def _build_pdf_html(
     comb = datos.get("combinado")    or {}
 
     # ── Fuente primaria de nombre: datos persistidos en BD ────────
-    # Si el parámetro externo llega vacío, se usa el que está
-    # dentro de cuantitativo (guardado por build_report_data).
     nombre_sujeto = (
         nombre_sujeto
         or cuan.get("nombre_sujeto")
@@ -940,14 +938,22 @@ def _build_pdf_html(
     punto_inicio  = cuan.get("starting_point") or "—"
     recom         = cuan.get("recommendation") or "—"
     display_name  = cuan.get("display_name")   or (template.display_name if template else "") or "—"
-    subject_label = cuan.get("subject")        or (template.subject if template else "") or "—"
+
+    # BUG-H2 FIX: subject_label usa display_name como fallback legible,
+    # no el campo interno "subject" (que contiene "matematica", "lectura", etc.)
+    subject_label = (
+        cuan.get("subject_display")
+        or cuan.get("display_name")
+        or (template.display_name if template else "")
+        or "—"
+    )
 
     # Fracción aciertos
     fraccion_str = f"{correctas} / {total_preg}" if total_preg else "—"
 
     # Tiempo: barra de progreso (cap al 100 %)
     time_pct = min(100.0, (study_time / target_time * 100.0) if target_time else 0.0)
-    time_bar_color = color_sem  # misma lógica que el semáforo
+    time_bar_color = color_sem
 
     # ── Datos cualitativos ───────────────────────────────────────
     pct_cual   = float(cual.get("total_porcentaje") or cual.get("puntaje") or 0)
@@ -982,16 +988,18 @@ def _build_pdf_html(
     etq_cual_label = _etq_label.get(etq_cual, etq_cual.replace("_", " ").capitalize())
     etq_comb_label = _etq_label.get(etq_comb, etq_comb.replace("_", " ").capitalize())
 
-    # Emoji semáforo (igual que frontend)
     _sem_emoji = {"verde": "🟢", "amarillo": "🟡", "rojo": "🔴"}
     sem_emoji  = _sem_emoji.get(semaforo, "⚪")
 
-    # ── Gauge SVG combinado (hero) ───────────────────────────────
+    # ── Gauges SVG ───────────────────────────────────────────────
     gauge_hero = _svg_gauge(pct_comb, color_comb, "Puntaje combinado")
     gauge_cuan = _svg_gauge(score_cuan, color_sem, "Índice cuantitativo")
     gauge_cual = _svg_gauge(pct_cual,  color_cual, "Índice cualitativo")
+    # BUG-H1 FIX: gauge_comb reutiliza gauge_hero (mismo valor/color/label)
+    # en lugar de llamar _svg_gauge() una segunda vez dentro del HTML.
+    gauge_comb = gauge_hero
 
-    # ── Metric-cards (6 tarjetas — igual al frontend) ────────────
+    # ── Metric-cards (6 tarjetas) ────────────────────────────────
     def _metric_card(icon: str, value: str, label: str) -> str:
         return (
             f'<div class="metric-card">'
@@ -1005,25 +1013,25 @@ def _build_pdf_html(
     target_str = f"{target_time:.0f} min" if target_time else "—"
 
     metrics_html = "".join([
-        _metric_card("📘", ws,                             "Nivel WS"),
-        _metric_card("🏁", punto_inicio,                   "Punto de inicio"),
-        _metric_card("📊", f"{pct_bruta:.1f}%",            "Porcentaje"),
-        _metric_card("✅", fraccion_str,                    "Aciertos"),
-        _metric_card("⏱",  study_str,                      "Tiempo estudio"),
-        _metric_card("🎯", target_str,                      "Tiempo objetivo"),
+        _metric_card("📘", ws,                  "Nivel WS"),
+        _metric_card("🏁", punto_inicio,        "Punto de inicio"),
+        _metric_card("📊", f"{pct_bruta:.1f}%", "Porcentaje"),
+        _metric_card("✅", fraccion_str,         "Aciertos"),
+        _metric_card("⏱",  study_str,            "Tiempo estudio"),
+        _metric_card("🎯", target_str,           "Tiempo objetivo"),
     ])
 
-    # ── Secciones cualitativas — barras horizontales coloreadas ──
+    # ── Secciones cualitativas ───────────────────────────────────
     secciones_rows_html = ""
     if secciones_q:
         rows = []
         for sec in secciones_q:
-            pct_s   = float(sec.get("puntaje") or sec.get("porcentaje") or 0)
+            pct_s    = float(sec.get("puntaje") or sec.get("porcentaje") or 0)
             nombre_s = str(sec.get("nombre") or sec.get("nombre_display") or "—")[:35]
-            etq_s   = sec.get("etiqueta") or ""
-            col_s   = _color_etiqueta(etq_s) if etq_s else color_cual
-            etl_s   = _etq_label.get(etq_s, etq_s.replace("_", " ").capitalize() if etq_s else "")
-            bar_w   = min(100, pct_s)
+            etq_s    = sec.get("etiqueta") or ""
+            col_s    = _color_etiqueta(etq_s) if etq_s else color_cual
+            etl_s    = _etq_label.get(etq_s, etq_s.replace("_", " ").capitalize() if etq_s else "")
+            bar_w    = min(100, pct_s)
             rows.append(
                 f'<div class="sec-row">'
                 f'  <span class="sec-name">{nombre_s}</span>'
@@ -1047,13 +1055,11 @@ def _build_pdf_html(
         )
         flags_html = f'<div class="flags-row">{chips}</div>'
 
-    # ── Override note ────────────────────────────────────────────
     override_html = (
         f'<p class="override-note">⚠ {override_note_txt}</p>'
         if override_note_txt else ""
     )
 
-    # ── Narrativa ────────────────────────────────────────────────
     narrativa_html = (
         f'<div class="narrativa-box">{narrativa}</div>'
         if narrativa else ""
@@ -1067,7 +1073,6 @@ def _build_pdf_html(
 <head>
 <meta charset="UTF-8"/>
 <style>
-  /* ── Reset ── */
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 
   body {{
@@ -1078,9 +1083,6 @@ def _build_pdf_html(
     padding: 24px 30px;
   }}
 
-  /* ══════════════════════════════════════════
-     ENCABEZADO
-  ══════════════════════════════════════════ */
   .header {{
     display: flex;
     justify-content: space-between;
@@ -1089,314 +1091,112 @@ def _build_pdf_html(
     padding-bottom: 14px;
     margin-bottom: 20px;
   }}
-  .header-brand {{
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-  }}
-  .header-title {{
-    font-size: 22px;
-    font-weight: bold;
-    color: #01696f;
-    letter-spacing: -0.3px;
-  }}
-  .header-sub {{
-    font-size: 11px;
-    color: #7a7974;
-  }}
+  .header-brand {{ display: flex; flex-direction: column; gap: 3px; }}
+  .header-title {{ font-size: 22px; font-weight: bold; color: #01696f; letter-spacing: -0.3px; }}
+  .header-sub   {{ font-size: 11px; color: #7a7974; }}
   .header-subject-badge {{
-    display: inline-block;
-    margin-top: 5px;
-    background: #e8f5f5;
-    color: #01696f;
-    border: 1px solid #b2d8d8;
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: bold;
+    display: inline-block; margin-top: 5px;
+    background: #e8f5f5; color: #01696f;
+    border: 1px solid #b2d8d8; border-radius: 4px;
+    padding: 2px 8px; font-size: 10px; font-weight: bold;
   }}
-  .header-meta {{
-    text-align: right;
-    font-size: 10px;
-    color: #7a7974;
-    line-height: 1.9;
-  }}
+  .header-meta {{ text-align: right; font-size: 10px; color: #7a7974; line-height: 1.9; }}
   .header-meta strong {{ color: #28251d; }}
 
-  /* ══════════════════════════════════════════
-     HERO — Puntaje combinado destacado
-  ══════════════════════════════════════════ */
   .hero {{
     background: linear-gradient(135deg, #f9f8f5 0%, #f0ede8 100%);
-    border: 1px solid #dcd9d5;
-    border-radius: 10px;
-    padding: 18px 24px;
-    margin-bottom: 20px;
-    display: flex;
-    align-items: center;
-    gap: 24px;
+    border: 1px solid #dcd9d5; border-radius: 10px;
+    padding: 18px 24px; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 24px;
   }}
   .hero-gauge {{ flex-shrink: 0; }}
-  .hero-info {{ flex: 1; }}
+  .hero-info  {{ flex: 1; }}
   .hero-score-label {{
-    font-size: 11px;
-    color: #7a7974;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    margin-bottom: 4px;
+    font-size: 11px; color: #7a7974;
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
   }}
-  .hero-score {{
-    font-size: 42px;
-    font-weight: bold;
-    line-height: 1;
-    margin-bottom: 6px;
-  }}
-  .hero-badge {{
-    display: inline-block;
-    padding: 4px 14px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: bold;
-    color: #fff;
-    margin-bottom: 8px;
-  }}
-  .hero-formula {{
-    font-size: 9px;
-    color: #7a7974;
-    font-style: italic;
-    margin-top: 6px;
-  }}
-  .hero-semaforo {{
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    font-size: 11px;
-    color: #28251d;
-  }}
+  .hero-score      {{ font-size: 42px; font-weight: bold; line-height: 1; margin-bottom: 6px; }}
+  .hero-badge      {{ display: inline-block; padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: bold; color: #fff; margin-bottom: 8px; }}
+  .hero-formula    {{ font-size: 9px; color: #7a7974; font-style: italic; margin-top: 6px; }}
+  .hero-semaforo   {{ display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 11px; color: #28251d; }}
   .hero-semaforo-emoji {{ font-size: 16px; }}
 
-  /* ══════════════════════════════════════════
-     METRIC-CARDS GRID (6 tarjetas)
-  ══════════════════════════════════════════ */
   .metrics-grid {{
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 20px;
+    display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;
   }}
   .metric-card {{
-    flex: 1 1 calc(16.6% - 10px);
-    min-width: 80px;
-    background: #fafaf8;
-    border: 1px solid #dcd9d5;
-    border-radius: 8px;
-    padding: 10px 8px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex: 1 1 calc(16.6% - 10px); min-width: 80px;
+    background: #fafaf8; border: 1px solid #dcd9d5; border-radius: 8px;
+    padding: 10px 8px; text-align: center;
+    display: flex; flex-direction: column; gap: 4px;
   }}
   .metric-icon  {{ font-size: 18px; }}
-  .metric-value {{
-    font-size: 14px;
-    font-weight: bold;
-    color: #28251d;
-    white-space: nowrap;
-  }}
-  .metric-label {{
-    font-size: 8.5px;
-    color: #7a7974;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }}
+  .metric-value {{ font-size: 14px; font-weight: bold; color: #28251d; white-space: nowrap; }}
+  .metric-label {{ font-size: 8.5px; color: #7a7974; text-transform: uppercase; letter-spacing: 0.04em; }}
 
-  /* ══════════════════════════════════════════
-     SECCIONES BLOQUE
-  ══════════════════════════════════════════ */
-  .block {{
-    margin-bottom: 18px;
-    border: 1px solid #dcd9d5;
-    border-radius: 8px;
-    overflow: hidden;
-  }}
+  .block {{ margin-bottom: 18px; border: 1px solid #dcd9d5; border-radius: 8px; overflow: hidden; }}
   .block-title {{
-    background: #f3f0ec;
-    padding: 7px 14px;
-    font-size: 11.5px;
-    font-weight: bold;
-    color: #28251d;
+    background: #f3f0ec; padding: 7px 14px;
+    font-size: 11.5px; font-weight: bold; color: #28251d;
     border-bottom: 1px solid #dcd9d5;
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    display: flex; align-items: center; gap: 6px;
   }}
   .block-body {{ padding: 14px; }}
 
-  /* ── Gauge row dentro de bloque ── */
-  .gauge-row {{
-    display: flex;
-    align-items: flex-start;
-    gap: 18px;
-    margin-bottom: 10px;
-  }}
+  .gauge-row   {{ display: flex; align-items: flex-start; gap: 18px; margin-bottom: 10px; }}
   .gauge-shrink {{ flex-shrink: 0; }}
-  .gauge-info {{ flex: 1; }}
+  .gauge-info  {{ flex: 1; }}
   .etiqueta-badge {{
-    display: inline-block;
-    padding: 3px 12px;
-    border-radius: 20px;
-    font-size: 10.5px;
-    font-weight: bold;
-    color: #fff;
-    margin-bottom: 7px;
+    display: inline-block; padding: 3px 12px; border-radius: 20px;
+    font-size: 10.5px; font-weight: bold; color: #fff; margin-bottom: 7px;
   }}
 
-  /* ── Tabla de datos ── */
   table {{ width: 100%; border-collapse: collapse; margin-top: 8px; }}
   td, th {{ padding: 5px 8px; border: 1px solid #dcd9d5; font-size: 10px; }}
   th {{
-    background: #f9f8f5;
-    font-weight: bold;
-    color: #7a7974;
-    text-transform: uppercase;
-    font-size: 9px;
-    letter-spacing: 0.04em;
+    background: #f9f8f5; font-weight: bold; color: #7a7974;
+    text-transform: uppercase; font-size: 9px; letter-spacing: 0.04em;
   }}
   tr:nth-child(even) td {{ background: #fafaf8; }}
 
-  /* ── Barra de tiempo ── */
   .time-bar-wrap  {{ margin-top: 10px; }}
-  .time-bar-track {{
-    height: 10px;
-    background: #e6e4df;
-    border-radius: 5px;
-    overflow: hidden;
-    margin-top: 4px;
-  }}
+  .time-bar-track {{ height: 10px; background: #e6e4df; border-radius: 5px; overflow: hidden; margin-top: 4px; }}
   .time-bar-fill  {{ height: 100%; border-radius: 5px; }}
 
-  /* ── Recomendación ── */
   .recom-box {{
-    background: #f3f0ec;
-    border-left: 3px solid #01696f;
-    padding: 9px 13px;
-    border-radius: 0 5px 5px 0;
-    font-size: 10px;
-    color: #28251d;
-    margin-top: 12px;
-    line-height: 1.5;
+    background: #f3f0ec; border-left: 3px solid #01696f;
+    padding: 9px 13px; border-radius: 0 5px 5px 0;
+    font-size: 10px; color: #28251d; margin-top: 12px; line-height: 1.5;
   }}
   .recom-label {{
-    font-size: 9px;
-    font-weight: bold;
-    color: #01696f;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 4px;
+    font-size: 9px; font-weight: bold; color: #01696f;
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
   }}
 
-  /* ── Secciones cualitativas — barras horizontales ── */
-  .sec-row {{
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-  }}
-  .sec-name {{
-    font-size: 10px;
-    color: #28251d;
-    flex: 0 0 150px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }}
-  .sec-bar-wrap {{
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }}
-  .sec-bar-track {{
-    flex: 1;
-    height: 12px;
-    background: #e6e4df;
-    border-radius: 6px;
-    overflow: hidden;
-  }}
+  .sec-row    {{ display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }}
+  .sec-name   {{ font-size: 10px; color: #28251d; flex: 0 0 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+  .sec-bar-wrap {{ flex: 1; display: flex; align-items: center; gap: 6px; }}
+  .sec-bar-track {{ flex: 1; height: 12px; background: #e6e4df; border-radius: 6px; overflow: hidden; }}
   .sec-bar-fill  {{ height: 100%; border-radius: 6px; }}
-  .sec-pct {{
-    font-size: 10px;
-    font-weight: bold;
-    flex: 0 0 34px;
-    text-align: right;
-  }}
-  .sec-tag {{
-    flex: 0 0 auto;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 9px;
-    font-weight: bold;
-    color: #fff;
-    white-space: nowrap;
-  }}
+  .sec-pct    {{ font-size: 10px; font-weight: bold; flex: 0 0 34px; text-align: right; }}
+  .sec-tag    {{ flex: 0 0 auto; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: bold; color: #fff; white-space: nowrap; }}
 
-  /* ── Auto-flags chips ── */
-  .flags-row {{ margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }}
-  .flag-chip {{
-    background: #f3f0ec;
-    border: 1px solid #dcd9d5;
-    border-radius: 4px;
-    padding: 3px 9px;
-    font-size: 9px;
-    color: #7a7974;
-  }}
+  .flags-row  {{ margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }}
+  .flag-chip  {{ background: #f3f0ec; border: 1px solid #dcd9d5; border-radius: 4px; padding: 3px 9px; font-size: 9px; color: #7a7974; }}
 
-  /* ── Narrativa ── */
-  .narrativa-box {{
-    background: #f9f8f5;
-    border: 1px solid #dcd9d5;
-    border-radius: 6px;
-    padding: 10px 14px;
-    font-size: 10px;
-    color: #28251d;
-    line-height: 1.55;
-    margin-top: 12px;
-  }}
+  .narrativa-box {{ background: #f9f8f5; border: 1px solid #dcd9d5; border-radius: 6px; padding: 10px 14px; font-size: 10px; color: #28251d; line-height: 1.55; margin-top: 12px; }}
+  .override-note {{ font-size: 10px; color: #a13544; margin-top: 5px; font-weight: bold; }}
+  .formula-txt   {{ font-size: 9.5px; color: #7a7974; margin-top: 6px; font-style: italic; }}
 
-  /* ── Override ── */
-  .override-note {{
-    font-size: 10px;
-    color: #a13544;
-    margin-top: 5px;
-    font-weight: bold;
-  }}
-
-  /* ── Formula ── */
-  .formula-txt {{
-    font-size: 9.5px;
-    color: #7a7974;
-    margin-top: 6px;
-    font-style: italic;
-  }}
-
-  /* ── Footer ── */
   .footer {{
-    margin-top: 22px;
-    border-top: 1px solid #dcd9d5;
-    padding-top: 8px;
-    font-size: 9px;
-    color: #bab9b4;
-    text-align: center;
-    line-height: 1.7;
+    margin-top: 22px; border-top: 1px solid #dcd9d5;
+    padding-top: 8px; font-size: 9px; color: #bab9b4;
+    text-align: center; line-height: 1.7;
   }}
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════
-     ENCABEZADO
-═══════════════════════════════════════════════════════ -->
 <div class="header">
   <div class="header-brand">
     <div class="header-title">Boletín de Desempeño</div>
@@ -1412,9 +1212,6 @@ def _build_pdf_html(
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     HERO — Puntaje combinado prominente
-═══════════════════════════════════════════════════════ -->
 <div class="hero">
   <div class="hero-gauge">{gauge_hero}</div>
   <div class="hero-info">
@@ -1430,16 +1227,10 @@ def _build_pdf_html(
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     MÉTRICAS — 6 tarjetas (igual al frontend)
-═══════════════════════════════════════════════════════ -->
 <div class="metrics-grid">
   {metrics_html}
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     BLOQUE ① — Cuantitativo
-═══════════════════════════════════════════════════════ -->
 <div class="block">
   <div class="block-title">📊 Resultado Cuantitativo</div>
   <div class="block-body">
@@ -1478,9 +1269,6 @@ def _build_pdf_html(
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     BLOQUE ② — Cualitativo
-═══════════════════════════════════════════════════════ -->
 <div class="block">
   <div class="block-title">📋 Resultado Cualitativo — Evaluación Observacional</div>
   <div class="block-body">
@@ -1498,14 +1286,11 @@ def _build_pdf_html(
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     BLOQUE ③ — Combinado + Narrativa
-═══════════════════════════════════════════════════════ -->
 <div class="block">
   <div class="block-title">🎯 Puntaje Combinado (65% cuantitativo · 35% cualitativo)</div>
   <div class="block-body">
     <div class="gauge-row">
-      <div class="gauge-shrink">{_svg_gauge(pct_comb, color_comb, "Combinado")}</div>
+      <div class="gauge-shrink">{gauge_comb}</div>
       <div class="gauge-info">
         <div class="etiqueta-badge" style="background:{color_comb};">{etq_comb_label}</div>
         <p class="formula-txt">Fórmula: {formula_txt}</p>
@@ -1530,9 +1315,6 @@ def _build_pdf_html(
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════
-     FOOTER
-═══════════════════════════════════════════════════════ -->
 <div class="footer">
   Generado por el sistema de evaluación Kumon &nbsp;·&nbsp; {test_date_raw}<br/>
   Documento de uso interno del orientador · Kumon &copy;
@@ -1540,7 +1322,6 @@ def _build_pdf_html(
 
 </body>
 </html>"""
-
 
 # ──────────────────────────────────────────────────────────────
 # Helpers internos para PDF fallback (ReportLab)
