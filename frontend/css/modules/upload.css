@@ -58,8 +58,8 @@
   flex-direction:  column;
   align-items:     center;
   justify-content: center;
-  gap:             var(--space-3);
-  padding:         var(--space-10) var(--space-6);
+  gap:             var(--space-);
+  padding:         var(--space-) var(--space-6);
   text-align:      center;
   pointer-events:  none;
 }
@@ -79,8 +79,8 @@
 
 /* Ícono SVG */
 .dropzone-icon {
-  width:      48px;
-  height:     48px;
+  width:      36px;
+  height:     36px;
   color:      var(--muted);
   transition: color var(--transition);
 }
