@@ -687,7 +687,6 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
 # ──────────────────────────────────────────────────────────────
 # PATCH /boletin/{result_id}
 # ──────────────────────────────────────────────────────────────
-
 @router.patch("/boletin/{result_id}", response_model=BoletinPatchResponse)
 def patch_boletin(
     result_id: UUID,
@@ -708,6 +707,10 @@ def patch_boletin(
     El boletín corregido se persiste en bulletin.datos_boletin, que es la
     fuente que usa get_boletin_pdf() al generar el PDF final.
     No se recalcula nada: solo se escribe lo que el orientador indica.
+
+    BUG-3 FIX: correcciones válidas ya no se pierden si una del lote falla.
+    Se aplican todas las que sean posibles y se reportan los errores
+    sin descartar el trabajo hecho.
     """
     result = (
         db.query(TestResult)
@@ -734,12 +737,16 @@ def patch_boletin(
         )
 
     # Trabajar sobre una copia mutable del JSON persistido
-    datos = copy.deepcopy(bulletin.datos_boletin)  # ← BUG-06: import ya está arriba
+    datos = copy.deepcopy(bulletin.datos_boletin)
 
     correcciones_aplicadas = 0
     errores: list[str] = []
 
     for correccion in payload.correcciones:
+        # BUG-3 FIX: cada corrección opera sobre una copia aislada del nodo raíz.
+        # Si falla la navegación o la escritura, solo ESA corrección se descarta
+        # y se acumula en errores — las demás correcciones válidas se conservan
+        # en `datos` y llegan al commit normalmente.
         partes = correccion.campo.split(".")
         nodo = datos
         try:
@@ -756,32 +763,54 @@ def patch_boletin(
                 nodo[clave_final] = correccion.valor_nuevo
 
             correcciones_aplicadas += 1
+
         except (KeyError, IndexError, ValueError, TypeError) as exc:
             errores.append(f"'{correccion.campo}': {exc}")
+            # BUG-3 FIX: NO hacemos raise aquí. Continuamos con la siguiente
+            # corrección del lote. Al final se informa cuáles fallaron pero
+            # se persiste todo lo que sí fue válido.
+            continue
 
-    if errores:
+    # BUG-3 FIX: solo bloqueamos el commit si NO se pudo aplicar
+    # absolutamente ninguna corrección del lote.
+    # Si al menos una fue válida → persistimos y reportamos los errores
+    # parciales en el mensaje de respuesta sin lanzar 422.
+    if errores and correcciones_aplicadas == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"No se pudieron aplicar {len(errores)} corrección(es): {'; '.join(errores)}",
+            detail=f"No se pudo aplicar ninguna corrección: {'; '.join(errores)}",
         )
 
-    # BUG-05 FIX: leer auditoría desde `datos` (copia mutable), NO desde bulletin.datos_boletin
+    # Auditoría: registrar solo las correcciones que sí se aplicaron
+    campos_aplicados = [
+        c.campo for c in payload.correcciones
+        if f"'{c.campo}':" not in " ".join(errores)
+    ]
+
     audit = datos.get("_auditoria_correcciones", [])
     audit.append({
         "corregido_por": payload.corregido_por,
         "corregido_at":  datetime.now(timezone.utc).isoformat(),
-        "campos": [c.campo for c in payload.correcciones],
+        "campos": campos_aplicados,
+        # BUG-3 FIX: registrar también qué campos fallaron para trazabilidad
+        "campos_fallidos": errores if errores else None,
     })
     datos["_auditoria_correcciones"] = audit
 
     # Persistir
     bulletin.datos_boletin = datos
-    bulletin.status        = "ready"   # ← BUG-01 FIX: "corregido" violaba el CHECK CONSTRAINT
+    bulletin.status        = "ready"
     db.add(bulletin)
     db.commit()
     db.refresh(bulletin)
 
     datos_final = bulletin.datos_boletin
+
+    # BUG-3 FIX: mensaje enriquecido cuando hubo errores parciales
+    mensaje_base = f"Boletín corregido por {payload.corregido_por}. {correcciones_aplicadas} campo(s) actualizado(s)."
+    if errores:
+        mensaje_base += f" Advertencia — {len(errores)} campo(s) no aplicado(s): {'; '.join(errores)}"
+
     return BoletinPatchResponse(
         boletin_id=bulletin.id_bulletin,
         result_id=result.id_result,
@@ -794,9 +823,8 @@ def patch_boletin(
         combinado=datos_final.get("combinado", {}),
         gaze=datos_final.get("gaze"),
         correcciones_aplicadas=correcciones_aplicadas,
-        message=f"Boletín corregido por {payload.corregido_por}. {correcciones_aplicadas} campo(s) actualizados.",
+        message=mensaje_base,
     )
-
 
 
 # ──────────────────────────────────────────────────────────────
