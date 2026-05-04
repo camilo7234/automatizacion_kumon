@@ -187,12 +187,12 @@ function _renderMetrics(data) {
   const c = data.cuantitativo ?? {};
 
   const metrics = [
-    { label: 'Nivel WS',       value: c.ws ?? '—',                                       icon: '📘' },
-    { label: 'Punto de inicio', value: c.starting_point ?? '—',                          icon: '🏁' },
-    { label: 'Porcentaje',     value: formatPercent(_toFloat(c.percentage)),              icon: '📊' },
-    { label: 'Aciertos',       value: formatFraction(c.correct_answers, c.total_questions), icon: '✅' },
-    { label: 'Tiempo estudio', value: formatMinutes(_toFloat(c.study_time_min)),          icon: '⏱' },
-    { label: 'Tiempo objetivo', value: formatMinutes(_toFloat(c.target_time_min)),        icon: '🎯' },
+    { label: 'Nivel de trabajo',   value: c.ws ?? '—',                                          icon: '📘' },
+    { label: 'Punto de partida',   value: c.starting_point ?? '—',                              icon: '🏁' },
+    { label: 'Porcentaje',         value: formatPercent(_toFloat(c.percentage)),                 icon: '📊' },
+    { label: 'Aciertos',           value: formatFraction(c.correct_answers, c.total_questions),  icon: '✅' },
+    { label: 'Tiempo estudio',     value: formatMinutes(_toFloat(c.study_time_min)),             icon: '⏱' },
+    { label: 'Tiempo objetivo',    value: formatMinutes(_toFloat(c.target_time_min)),            icon: '🎯' },
   ];
 
   el.boletinMetricsGrid.innerHTML = metrics
@@ -205,7 +205,6 @@ function _renderMetrics(data) {
     `)
     .join('');
 }
-
 
 /* ══════════════════════════════════════════════
    SECCIONES CUALITATIVAS
@@ -386,7 +385,7 @@ export function renderBoletinEditor(data) {
     const sp = c.starting_point;
     if (sp) {
       el.editorSpDetail.textContent =
-        `${sp}${c.ws ? ' · Nivel WS: ' + c.ws : ''}${c.current_level ? ' · ' + c.current_level : ''}`;
+        `${sp}${c.ws ? ' · Nivel de trabajo: ' + c.ws : ''}${c.current_level ? ' · ' + c.current_level : ''}`;
       show(el.editorStartingPoint);
     } else {
       hide(el.editorStartingPoint);
@@ -466,12 +465,12 @@ export function renderBoletinEditor(data) {
   /* ── Editor orientador: campos cuantitativos ── */
   if (el.editorCuantGrid) {
     const cuantFields = [
-      { key: 'cuantitativo.ws',              label: 'Nivel WS',             type: 'text',   value: c.ws ?? '',                          placeholder: 'Ej: 5A'  },
-      { key: 'cuantitativo.starting_point',  label: 'Punto de inicio',      type: 'text',   value: c.starting_point ?? '',              placeholder: 'Ej: B41' },
-      { key: 'cuantitativo.correct_answers', label: 'Respuestas correctas', type: 'number', value: c.correct_answers ?? '',             placeholder: 'Ej: 18', min: 0 },
-      { key: 'cuantitativo.total_questions', label: 'Total preguntas',       type: 'number', value: c.total_questions ?? '',             placeholder: 'Ej: 20', min: 1 },
-      { key: 'cuantitativo.study_time_min',  label: 'Tiempo estudio (min)', type: 'number', value: _toFloat(c.study_time_min) ?? '',    placeholder: 'Ej: 45', min: 0 },
-      { key: 'cuantitativo.target_time_min', label: 'Tiempo esperado (min)', type: 'number', value: _toFloat(c.target_time_min) ?? '', placeholder: 'Ej: 30', min: 0 },
+      { key: 'cuantitativo.ws',              label: 'Nivel de trabajo',      type: 'text',   value: c.ws ?? '',                          placeholder: 'Ej: 5A'  },
+      { key: 'cuantitativo.starting_point',  label: 'Punto de partida',      type: 'text',   value: c.starting_point ?? '',              placeholder: 'Ej: B41' },
+      { key: 'cuantitativo.correct_answers', label: 'Respuestas correctas',  type: 'number', value: c.correct_answers ?? '',             placeholder: 'Ej: 18', min: 0 },
+      { key: 'cuantitativo.total_questions', label: 'Total preguntas',        type: 'number', value: c.total_questions ?? '',             placeholder: 'Ej: 20', min: 1 },
+      { key: 'cuantitativo.study_time_min',  label: 'Tiempo estudio (min)',  type: 'number', value: _toFloat(c.study_time_min) ?? '',    placeholder: 'Ej: 45', min: 0 },
+      { key: 'cuantitativo.target_time_min', label: 'Tiempo esperado (min)', type: 'number', value: _toFloat(c.target_time_min) ?? '',   placeholder: 'Ej: 30', min: 0 },
     ];
     el.editorCuantGrid.innerHTML = cuantFields
       .map(f => {
@@ -526,7 +525,6 @@ export function renderBoletinEditor(data) {
     }
   }
 
-
   /* ── Precargar textareas de narrativa ── */
   if (el.editorRecommendation) el.editorRecommendation.value = c.recommendation ?? '';
   if (el.editorNarrativa)      el.editorNarrativa.value      = comb.narrativa ?? '';
@@ -534,7 +532,6 @@ export function renderBoletinEditor(data) {
   /* ── Bind botones del editor (solo una vez) ── */
   _bindEditorButtons();
 }
-
 
 /* ══════════════════════════════════════════════
    TABS DEL EDITOR
