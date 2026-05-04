@@ -147,14 +147,12 @@ function _renderManualReviewBanner(data) {
       <span class="banner-icon">⚠️</span>
       <span>
         <strong>Revisión necesaria.</strong>
-        El video no se pudo leer con claridad suficiente
-        (<strong>${confidenceLabel(score)}</strong>).
-        Completa el formulario y ajusta los valores antes de generar el boletín.
+        Algunos datos no se pudieron capturar automáticamente.
+        Completa los campos del formulario y ajusta los valores antes de generar el boletín.
       </span>
     `;
   }
 }
-
 
 /* ══════════════════════════════════════════════
    SEMÁFORO
@@ -293,7 +291,9 @@ function _fractionTone(correct, total) {
 function _renderDetails(data) {
   if (!el.detailsGrid) return;
   el.detailsGrid.innerHTML = '';
+  hide(el.detailsGrid);
 }
+
 
 function _formatTipoSujeto(tipo) {
   if (!tipo) return '—';

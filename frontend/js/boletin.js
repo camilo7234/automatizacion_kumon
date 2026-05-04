@@ -169,7 +169,7 @@ function _renderConfidenceDot(data) {
     if (cuantitativo.needs_manual_review) {
       manualBanner.innerHTML = `
         <span>⚠️</span>
-        <span>Confianza OCR baja (${label}). Verifica los valores en el editor.</span>
+        <span>Precisión de lectura baja. Verifica los valores antes de continuar.</span>
       `;
       show(manualBanner);
     } else {
@@ -177,7 +177,6 @@ function _renderConfidenceDot(data) {
     }
   }
 }
-
 
 /* ══════════════════════════════════════════════
    MÉTRICAS CUANTITATIVAS
