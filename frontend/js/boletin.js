@@ -292,7 +292,11 @@ function _renderCorrectionPanel(data) {
    BIND DE BOTONES — boletinSection
    openBoletinBtn → navega al editor
    ══════════════════════════════════════════════ */
+let _buttonsBound = false;
+
 function _bindButtons() {
+  if (_buttonsBound) return;
+  _buttonsBound = true;
 
   /* Navegar al editor */
   el.openBoletinBtn?.addEventListener('click', () => {
@@ -323,7 +327,6 @@ function _bindButtons() {
     downloadBoletinPdf(resultId, name);
   });
 }
-
 
 /* ══════════════════════════════════════════════
    RENDER EDITOR DE BOLETÍN
@@ -555,30 +558,35 @@ function _editorSetTab(tab) {
 
 /* ══════════════════════════════════════════════
    BIND BOTONES DEL EDITOR
-   Se usa flag para evitar listeners duplicados
-   en recargas del editor.
+   Usa AbortController para limpiar listeners
+   anteriores en cada apertura del editor.
+   Evita que los botones queden apuntando al
+   resultado de un estudiante anterior sin
+   recargar la página.
    ══════════════════════════════════════════════ */
-let _editorBound = false;
+let _editorAbortController = null;
 
 function _bindEditorButtons() {
-  if (_editorBound) return;
-  _editorBound = true;
+  if (_editorAbortController) {
+    _editorAbortController.abort();
+  }
+  _editorAbortController = new AbortController();
+  const signal = _editorAbortController.signal;
 
   /* Tabs */
-  el.editorTabPadre?.addEventListener('click',      () => _editorSetTab('padre'));
-  el.editorTabOrientador?.addEventListener('click', () => _editorSetTab('orientador'));
+  el.editorTabPadre?.addEventListener('click',      () => _editorSetTab('padre'),      { signal });
+  el.editorTabOrientador?.addEventListener('click', () => _editorSetTab('orientador'), { signal });
 
   /* Volver al resumen */
   el.editorBackBtn?.addEventListener('click', () => {
     hide(el.boletinEditorSection);
     show(el.boletinSection);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
+  }, { signal });
 
   /* Guardar y generar PDF */
-  el.editorSaveBtn?.addEventListener('click', _handleEditorSave);
+  el.editorSaveBtn?.addEventListener('click', _handleEditorSave, { signal });
 }
-
 
 /* ══════════════════════════════════════════════
    GUARDAR DESDE EDITOR — PATCH + habilitar PDF
@@ -777,7 +785,12 @@ export function resetBoletin() {
   if (el.editorRecommendation)  el.editorRecommendation.value    = '';
   if (el.editorNarrativa)       el.editorNarrativa.value         = '';
   if (el.editorCorregidoPor)    el.editorCorregidoPor.value      = '';
-  _editorBound = false;
+
+  /* Limpiar listeners del editor */
+  if (_editorAbortController) {
+    _editorAbortController.abort();
+    _editorAbortController = null;
+  }
 
   clearAlert(el.boletinAlert);
   clearAlert(el.editorAlert);
@@ -788,7 +801,6 @@ export function resetBoletin() {
 
   resetBoletinButtons();
 }
-
 
 /* ══════════════════════════════════════════════
    UTILIDADES INTERNAS
