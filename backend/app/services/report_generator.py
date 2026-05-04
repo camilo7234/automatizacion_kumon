@@ -186,8 +186,6 @@ def _semaforo_to_score(semaforo: Optional[str]) -> Optional[float]:
 # ══════════════════════════════════════════════════════════════════
 # Bloque cuantitativo
 # ══════════════════════════════════════════════════════════════════
-
-
 def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
     """
     Construye el resumen cuantitativo puro.
