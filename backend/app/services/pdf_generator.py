@@ -107,9 +107,9 @@ _SEM_COLOR: Dict[str, Any] = {
     "rojo":     colors.HexColor("#DC2626"),
 }
 _SEM_TEXTO: Dict[str, str] = {
-    "verde":    "[OK]  Puede avanzar al siguiente nivel",
-    "amarillo": "[!!]  Debe consolidar antes de avanzar",
-    "rojo":     "[XX]  Requiere refuerzo en este nivel",
+    "verde":    "El estudiante puede avanzar al siguiente nivel.",
+    "amarillo": "El estudiante debe consolidar los contenidos antes de avanzar.",
+    "rojo":     "El estudiante requiere refuerzo adicional en este nivel.",
 }
 
 # ── Etiquetas cualitativas ────────────────────────────────────────
@@ -135,9 +135,9 @@ _ETIQ_LABEL: Dict[str, str] = {
 # ── Fuente de cada prefill automático ────────────────────────────
 # Nota: emojis eliminados — no están garantizados en Helvetica/Linux.
 _FUENTE_ICONO: Dict[str, str] = {
-    "video":  "[Video]",
-    "audio":  "[Audio]",
-    "camara": "[Camara]",
+    "video":  "Registro en video",
+    "audio":  "Registro en audio",
+    "camara": "Registro fotográfico",
 }
 
 
