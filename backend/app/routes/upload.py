@@ -217,7 +217,7 @@ async def upload_video(
                 if not chunk:
                     break
                 bytes_written += len(chunk)
-                if bytes_written > max_bytes:
+                if bytes_written >= max_bytes:
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                         detail=(

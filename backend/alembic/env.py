@@ -62,7 +62,7 @@ config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 target_metadata = Base.metadata
 
 # ── Schemas que Alembic debe gestionar ───────────────────────────
-MANAGED_SCHEMAS = {"admin", "processing", "audit"}
+MANAGED_SCHEMAS = { "processing", }
 
 
 def include_object(object, name, type_, reflected, compare_to):
