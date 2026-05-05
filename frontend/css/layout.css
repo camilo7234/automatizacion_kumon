@@ -175,11 +175,13 @@
   overflow:      hidden;
 }
 
+
 .section-header {
   padding:       var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--line);
   background:    var(--grad-surface-2);
 }
+
 
 .section-header-row {
   display:         flex;
@@ -189,6 +191,7 @@
   flex-wrap:       wrap;
 }
 
+
 .section-title {
   font-size:   var(--text-lg);
   font-weight: 700;
@@ -196,12 +199,14 @@
   line-height: 1.2;
 }
 
+
 .section-description {
   font-size:  var(--text-sm);
   color:      var(--muted);
   margin-top: var(--space-1);
   max-width:  none;
 }
+
 
 /* Padding interior de secciones */
 .upload-form,
@@ -212,13 +217,16 @@
   padding: var(--space-4);
 }
 
+
 .pipeline-steps {
   padding: var(--space-4) var(--space-5) 0;
 }
 
+
 .app-section > .alert {
   margin: var(--space-3) var(--space-4) 0;
 }
+
 
 .app-section {
   transition: 
@@ -226,11 +234,26 @@
     transform var(--transition);
 }
 
+
 /* mejora percepción en tablet (interacción táctil) */
 .app-section:active {
   transform: scale(0.995);
 }
 
+
+/* ── Scroll anchor — compensar header sticky ──────────────────
+   Cuando JS hace scrollIntoView() sobre una sección del flujo,
+   el header fijo (≈56px) taparía el título de la sección.
+   scroll-margin-top reserva ese espacio para que el scroll
+   se detenga exactamente debajo del header, no detrás.
+   Si el alto del header cambia, ajustar este valor aquí.    */
+#pipelineSection,
+#resultSection,
+#cuestionarioSection,
+#boletinSection,
+#boletinEditorSection {
+  scroll-margin-top: 72px;
+}
 /* ══════════════════════════════════════════════
    APP FOOTER
    ══════════════════════════════════════════════ */

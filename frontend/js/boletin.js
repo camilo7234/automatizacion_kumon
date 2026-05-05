@@ -88,6 +88,11 @@ export function renderBoletin(data) {
    ══════════════════════════════════════════════ */
 export async function loadBoletin(resultId) {
   show(el.boletinSection);
+
+  /* Desplazar la vista a esta sección sin saltar al inicio de la página.
+     block:'start' + behavior:'smooth' da UX fluida sin teleportar. */
+  el.boletinSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   clearAlert(el.boletinAlert);
   hide(el.boletinContent);
   setBoletinActionsEnabled(false);
@@ -103,7 +108,6 @@ export async function loadBoletin(resultId) {
   clearAlert(el.boletinAlert);
   renderBoletin(data);
 }
-
 
 /* ══════════════════════════════════════════════
    BARRA DE ESTADO
@@ -331,6 +335,20 @@ function _bindButtons() {
    Llamado desde openBoletinBtn → navega a #boletinEditorSection
    Renderiza vista padre + precarga inputs del orientador.
    ══════════════════════════════════════════════ */
+
+/* Diccionario de traducción de flags internos a etiquetas legibles.
+   Agregar aquí cualquier nuevo flag que devuelva el backend.        */
+const _FLAG_LABELS = {
+  ritmo_trabajo:       'Ritmo de trabajo irregular',
+  actividad_general:   'Actividad general baja',
+  fluidez_lectura:     'Fluidez de lectura limitada',
+  pausas_frecuentes:   'Pausas frecuentes',
+  reescrituras:        'Varias reescrituras observadas',
+  concentracion_baja:  'Concentración baja',
+  tiempo_excedido:     'Tiempo excedido',
+  errores_sistematicos:'Errores sistemáticos',
+};
+
 export function renderBoletinEditor(data) {
   if (!data) return;
 
@@ -434,7 +452,12 @@ export function renderBoletinEditor(data) {
     const flags = cual.auto_flags ?? [];
     if (flags.length) {
       el.editorFlagsChips.innerHTML = flags
-        .map(f => `<span class="editor-flag-chip">${_escapeHtml(String(f))}</span>`)
+        .map(f => {
+          const label = _FLAG_LABELS[String(f)] ?? String(f)
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          return `<span class="editor-flag-chip">${_escapeHtml(label)}</span>`;
+        })
         .join('');
       show(el.editorFlagsBlock);
     } else {
@@ -532,6 +555,8 @@ export function renderBoletinEditor(data) {
   /* ── Bind botones del editor (solo una vez) ── */
   _bindEditorButtons();
 }
+
+
 
 /* ══════════════════════════════════════════════
    TABS DEL EDITOR
@@ -667,13 +692,10 @@ async function _handleEditorSave() {
   }
 
   /* — Sliders de secciones cualitativas — */
-  /* El campo usa índice NUMÉRICO: cualitativo.secciones.0.puntaje
-     El backend parsea dot-notation con int() sobre el tercer segmento.
-     Usar el nombre como índice genera int("Postura y actitud") → 422. */
   const seccionesActuales = current.cualitativo?.secciones ?? [];
 
   el.editorCualSliders?.querySelectorAll('.editor-slider').forEach(slider => {
-    const idx         = parseInt(slider.dataset.idx ?? '-1', 10);
+    const idx = parseInt(slider.dataset.idx ?? '-1', 10);
     if (idx === -1 || idx >= seccionesActuales.length) return;
 
     const valor_nuevo    = Number(slider.value);
@@ -724,7 +746,11 @@ async function _handleEditorSave() {
     MSG.BOLETIN_PATCH_SUCCESS ?? 'Correcciones guardadas. PDF listo.',
     'success'
   );
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  /* Llevar la vista al boletín actualizado — NO al inicio de la página.
+     El boletín está debajo en el flujo; scrollTo(top:0) desorientaba
+     a la orientadora al alejarla de la sección que acaba de guardar. */
+  el.boletinSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ══════════════════════════════════════════════

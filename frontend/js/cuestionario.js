@@ -73,14 +73,15 @@ export async function loadCuestionario() {
     return;
   }
 
-
   show(el.cuestionarioSection);
+
+  /* Desplazar la vista a esta sección sin saltar al inicio de la página. */
+  el.cuestionarioSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   clearAlert(el.cuestionarioAlert);
   setAlert(el.cuestionarioAlert, MSG.CUESTIONARIO_LOADING, 'info');
 
-
   const { ok, data, error } = await getCuestionario(resultId);
-
 
   if (!ok || !data) {
     setAlert(
@@ -91,33 +92,20 @@ export async function loadCuestionario() {
     return;
   }
 
-
   setCuestionario(data);
   clearAlert(el.cuestionarioAlert);
-
 
   _questions    = _normalizeQuestions(data.questions ?? []);
   _yaCompletado = Boolean(data.ya_completado);
 
-
-  /* Header del cuestionario */
   _renderHeader(data);
-
-
-  /* Preguntas */
   _renderQuestions(
     _questions,
     _yaCompletado,
     data.respuestas_guardadas ?? {}
   );
-
-
-  /* Footer — campo completado_por + botón submit */
   _renderFooter(data);
 
-
-  /* Si ya estaba completado y el boletín está habilitado,
-     disparar directamente sin esperar submit */
   if (_yaCompletado) {
     setCuestionarioDone(true);
     if (data.boletin_habilitado) {
@@ -125,7 +113,6 @@ export async function loadCuestionario() {
     }
   }
 }
-
 
 
 
