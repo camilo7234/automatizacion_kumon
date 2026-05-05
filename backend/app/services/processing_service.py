@@ -133,6 +133,9 @@ def ejecutar_pipeline(job_id: UUID) -> None:
         job = _get_job(db, job_id)
         if not job:
             logger.error(f"Job {job_id} no encontrado en BD.")
+            # No se puede usar _register_error ni _update_job porque
+            # el job no existe — se registra solo en log y se sale.
+            # El job nunca existió o fue eliminado externamente.
             return
 
         _update_job(db, job, status="processing", progress=5)
@@ -150,7 +153,7 @@ def ejecutar_pipeline(job_id: UUID) -> None:
                 f"TestTemplate no encontrado para id_template={job.id_template}"
             )
 
-        subject = template.subject
+        subject   = template.subject
         test_code = template.code
 
         logger.info(
@@ -849,6 +852,9 @@ def _register_error(db: Session, job_id: UUID, exc: Exception) -> None:
     """
     Registra el error en audit.processing_errors.
 
+    IMPORTANTE: siempre hace rollback antes de escribir para garantizar
+    que la sesión esté limpia, independientemente del estado en que
+    llegue (flush fallido, constraint violation, etc.).
 
     Campos reales del modelo:
       - id_job
@@ -858,6 +864,7 @@ def _register_error(db: Session, job_id: UUID, exc: Exception) -> None:
       - stack_trace
     """
     try:
+        db.rollback()  # ← limpia cualquier transacción inválida primero
         err = ProcessingError(
             id_job=job_id,
             stage="general",
@@ -869,7 +876,6 @@ def _register_error(db: Session, job_id: UUID, exc: Exception) -> None:
         db.commit()
     except Exception:
         db.rollback()
-
 
 
 # ══════════════════════════════════════════════════════════════════

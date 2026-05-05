@@ -422,7 +422,7 @@ class ProcessingJob(Base):
     )
     id_prospecto = Column(
         UUID(as_uuid=True),
-        ForeignKey("processing.prospectos.id_prospecto", ondelete="SET NULL"),
+        ForeignKey("processing.prospectos.id_prospecto", ondelete="CASCADE"),
         nullable=True,   # NULL cuando el sujeto es un estudiante
     )
 

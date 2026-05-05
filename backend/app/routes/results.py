@@ -40,7 +40,7 @@ from sqlalchemy.orm import Session
 from config.database import get_db
 from database.models import TestResult, QualitativeResult
 from app.schemas.result import TestResultResponse
-from config.cuestionarios import calcular_puntaje_cualitativo
+
 
 
 # ════════════════════════════════════════════════════════════════
@@ -54,10 +54,10 @@ router = APIRouter(prefix="/api/v1/results", tags=["results"])
 # 3) HELPERS INTERNOS
 # ════════════════════════════════════════════════════════════════
 
+
 def _flatten_respuestas(respuestas: dict[str, Any] | None) -> dict[str, Any]:
     """
-    Aplana el formato enriquecido de respuestas al formato plano
-    que espera calcular_puntaje_cualitativo.
+    Aplana el formato enriquecido de respuestas al formato plano.
 
     Entrada:  {"clave": {"valor": X, "fuente": "orientador", ...}}
     Salida:   {"clave": X}
@@ -80,12 +80,12 @@ def _get_nombre_sujeto(result: TestResult) -> str:
     Obtiene el nombre visible del sujeto sin asumir un único nombre de atributo.
 
     Se prioriza la relación correcta según tipo_sujeto, pero se incluyen
-    varios fallbacks para evitar errores si el modelo del admin cambia
-    ligeramente el nombre del campo.
+    varios fallbacks para evitar errores si el modelo cambia ligeramente
+    el nombre del campo.
     """
     tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
 
-    prospecto = getattr(result, "prospecto", None)
+    prospecto  = getattr(result, "prospecto", None)
     estudiante = getattr(result, "estudiante", None)
 
     if tipo_sujeto == "prospecto":
@@ -104,7 +104,7 @@ def _get_nombre_sujeto(result: TestResult) -> str:
             if value:
                 return str(value)
 
-        primer_nombre = getattr(obj, "primer_nombre", None)
+        primer_nombre   = getattr(obj, "primer_nombre", None)
         primer_apellido = getattr(obj, "primer_apellido", None)
         if primer_nombre or primer_apellido:
             return " ".join(
@@ -116,60 +116,20 @@ def _get_nombre_sujeto(result: TestResult) -> str:
 
 def _build_response(result: TestResult, qual: QualitativeResult | None) -> TestResultResponse:
     """
-    Construye el payload final del resultado con el contrato exacto
+    Construye el payload preliminar del resultado con el contrato exacto
     que espera TestResultResponse.
 
-    Importante:
-      - id_result / id_job se envían como UUID reales.
-      - No se incluye 'report' porque el schema no lo define.
-      - No se ejecuta build_report_data aquí porque esta ruta representa
-        el resultado preliminar, no el boletín final.
-      - Se conserva el cálculo auxiliar cualitativo únicamente para no
-        romper compatibilidad lógica con observaciones completas, aunque
-        no se exponga un reporte en la respuesta.
+    Este endpoint expone únicamente el resultado cuantitativo del OCR
+    más el estado de la observación cualitativa (si existe y si está
+    completa). El cálculo del puntaje cualitativo y el armado del
+    boletín final ocurren en el endpoint de boletines, no aquí.
     """
-    # ── Acceso seguro al template ────────────────────────────────
     template = result.template
+    obs      = result.observacion_cualitativa
 
-    # ── Observación cualitativa ──────────────────────────────────
-    obs = result.observacion_cualitativa
-
-    # ── Cálculo cualitativo auxiliar (sin generar boletín) ──────
-    # Se deja este bloque para conservar robustez operativa cuando
-    # exista observación completa, pero sin acoplar /results al flujo
-    # de report_generator ni al boletín consolidado.
-    if obs and obs.esta_completo and template:
-        try:
-            calc = calcular_puntaje_cualitativo(
-                subject=template.subject,
-                test_code=template.code,
-                respuestas=_flatten_respuestas(obs.respuestas),
-            )
-            total_porcentaje = float(calc.get("total_porcentaje", 0.0))
-            etiqueta_total = calc.get("etiqueta_total", "en_desarrollo")
-            secciones = calc.get("secciones", [])
-        except (ValueError, KeyError, TypeError):
-            total_porcentaje = 0.0
-            etiqueta_total = "en_desarrollo"
-            secciones = []
-    else:
-        total_porcentaje = 0.0
-        etiqueta_total = "en_desarrollo"
-        secciones = []
-
-    # ── Normalización defensiva de estructuras JSON ──────────────
     sections_detail = result.sections_detail or {}
-    raw_ocr_data = result.raw_ocr_data or {}
+    raw_ocr_data    = result.raw_ocr_data    or {}
 
-    # Estas variables se conservan para compatibilidad futura y para
-    # dejar explícito que el endpoint ya evaluó la presencia de datos
-    # cualitativos calculados, sin convertir esto en armado de boletín.
-    _ = total_porcentaje
-    _ = etiqueta_total
-    _ = secciones
-    _ = qual
-
-    # ── Response final con contrato exacto del schema ────────────
     return TestResultResponse(
         id_result=result.id_result,
         id_job=result.id_job,
@@ -177,8 +137,8 @@ def _build_response(result: TestResult, qual: QualitativeResult | None) -> TestR
         tipo_sujeto=result.tipo_sujeto or "",
         nombre_sujeto=_get_nombre_sujeto(result),
 
-        subject=template.subject if template else "",
-        test_code=template.code if template else "",
+        subject=template.subject      if template else "",
+        test_code=template.code       if template else "",
         display_name=template.display_name if template else "",
 
         test_date=result.test_date,
@@ -206,10 +166,43 @@ def _build_response(result: TestResult, qual: QualitativeResult | None) -> TestR
         created_at=result.created_at,
     )
 
+# ════════════════════════════════════════════════════════════════
+# 4) ENDPOINT: GET /api/v1/results/job/{job_id}
+# ════════════════════════════════════════════════════════════════
+
+
+@router.get("/job/{job_id}", response_model=TestResultResponse)
+def get_result_by_job(job_id: UUID, db: Session = Depends(get_db)):
+    """
+    Obtiene el resultado asociado a un job.
+
+    DEBE declararse ANTES que /{result_id} para que FastAPI no intente
+    parsear la string literal "job" como UUID en el patrón dinámico.
+    """
+    result = (
+        db.query(TestResult)
+        .filter(TestResult.id_job == job_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resultado no disponible para este job.",
+        )
+
+    qual = (
+        db.query(QualitativeResult)
+        .filter(QualitativeResult.id_job == result.id_job)
+        .first()
+    )
+
+    return _build_response(result, qual)
+
 
 # ════════════════════════════════════════════════════════════════
-# 4) ENDPOINT: GET /api/v1/results/{result_id}
+# 5) ENDPOINT: GET /api/v1/results/{result_id}
 # ════════════════════════════════════════════════════════════════
+
 
 @router.get("/{result_id}", response_model=TestResultResponse)
 def get_result(result_id: UUID, db: Session = Depends(get_db)):
@@ -229,35 +222,6 @@ def get_result(result_id: UUID, db: Session = Depends(get_db)):
 
     # QualitativeResult no tiene id_result.
     # La FK correcta es id_job → processing_jobs.id_job.
-    qual = (
-        db.query(QualitativeResult)
-        .filter(QualitativeResult.id_job == result.id_job)
-        .first()
-    )
-
-    return _build_response(result, qual)
-
-
-# ════════════════════════════════════════════════════════════════
-# 5) ENDPOINT: GET /api/v1/results/job/{job_id}
-# ════════════════════════════════════════════════════════════════
-
-@router.get("/job/{job_id}", response_model=TestResultResponse)
-def get_result_by_job(job_id: UUID, db: Session = Depends(get_db)):
-    """
-    Obtiene el resultado asociado a un job.
-    """
-    result = (
-        db.query(TestResult)
-        .filter(TestResult.id_job == job_id)
-        .first()
-    )
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Resultado no disponible para este job.",
-        )
-
     qual = (
         db.query(QualitativeResult)
         .filter(QualitativeResult.id_job == result.id_job)
