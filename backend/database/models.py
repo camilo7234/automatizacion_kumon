@@ -366,9 +366,6 @@ class Prospecto(Base):
 #   inferir automáticamente cuál FK usar para cada relationship.
 #   Por eso se declara foreign_keys=[...] en cada relación.
 # ──────────────────────────────────────────────────────────────────
-
-
-
 class ProcessingJob(Base):
     """
     [PROCESSING 3/7] Cola de procesamiento de videos.

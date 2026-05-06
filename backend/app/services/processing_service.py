@@ -132,10 +132,25 @@ def ejecutar_pipeline(job_id: UUID) -> None:
         # ──────────────────────────────────────────────────────────
         job = _get_job(db, job_id)
         if not job:
-            logger.error(f"Job {job_id} no encontrado en BD.")
+            logger.error(f"Job {job_id} no encontrado en BD — no se puede procesar.")
             # No se puede usar _register_error ni _update_job porque
-            # el job no existe — se registra solo en log y se sale.
-            # El job nunca existió o fue eliminado externamente.
+            # el job no existe — se intenta registrar en ProcessingError
+            # con id_job conocido para que quede traza en auditoria
+            try:
+                db.rollback()
+                err = ProcessingError(
+                    id_job=job_id,
+                    stage="startup",
+                    error_type="JobNotFound",
+                    error_detail=f"Job {job_id} no encontrado en BD al iniciar pipeline.",
+                    stack_trace=None,
+                )
+                db.add(err)
+                db.commit()
+            except Exception as audit_err:
+                logger.error(f"No se pudo registrar JobNotFound en auditoría: {audit_err}")
+            finally:
+                db.close()
             return
 
         _update_job(db, job, status="processing", progress=5)
@@ -650,6 +665,10 @@ def _calcular_resultado_cualitativo(
     actividad = (prefills.get("actividad_general") or {}).get("valor", 1.0)
     if actividad is None:
         actividad = 1.0
+    try:
+        actividad = float(actividad)
+    except (ValueError, TypeError):
+        actividad = 1.0
     if actividad < 0.05:
         flags.append({
             "tipo":    "critico",
@@ -666,7 +685,6 @@ def _calcular_resultado_cualitativo(
             "tipo":    "leve",
             "detalle": f"Actividad baja ({actividad:.3f})",
         })
-
 
     # ── Clasificación final ───────────────────────────────────────
     total         = len(flags)

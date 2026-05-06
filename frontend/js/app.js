@@ -24,7 +24,7 @@ import {
 import { resetState, getResultId }                         from './state.js';
 import { checkHealth }                                     from './api.js';
 import { initUpload,       resetUpload }                   from './upload.js';
-import { initPolling,      startPolling,   resetPolling }  from './polling.js';
+import { initPolling,      startPolling,   resetPolling, _updatePipelineSteps }  from './polling.js';
 import { initResultado,    loadResultado,  loadResultadoById,resetResultado } from './resultado.js';
 import { initCuestionario, loadCuestionario, resetCuestionario } from './cuestionario.js';
 import { initBoletin,      loadBoletin,    resetBoletin }  from './boletin.js';
@@ -157,9 +157,9 @@ function _onManualReview(resultId) {
  * Carga el cuestionario de validación cualitativa.
  */
 function _onResultReady() {
+  _updatePipelineSteps('validated');
   loadCuestionario();
 }
-
 
 /**
  * PASO 4 → 5
@@ -177,6 +177,7 @@ function _onCuestionarioDone() {
     console.error('[app] _onCuestionarioDone: resultId no disponible en estado.');
     return;
   }
+  _updatePipelineSteps('boletin');
   loadBoletin(resultId);
 }
 

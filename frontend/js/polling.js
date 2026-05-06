@@ -103,7 +103,7 @@ function _getPipelineStepEl(stepId) {
  * Actualiza el estado visual de los pasos del pipeline.
  * @param {string} status — estado actual del job
  */
-function _updatePipelineSteps(status) {
+export function _updatePipelineSteps(status) {
   const activeIndex = _statusToStepIndex(status);
 
 
@@ -148,6 +148,8 @@ function _statusToStepIndex(status) {
     [JOB_STATUS.DONE]:          3,  // resultado listo
     [JOB_STATUS.ERROR]:         2,  // falló durante procesamiento
     [JOB_STATUS.MANUAL_REVIEW]: 2,  // procesamiento terminó con baja confianza
+    'validated':                4,  // orientador completó cuestionario
+    'boletin':                  5,  // boletín generado
   };
   return map[status] ?? 0;
 }
