@@ -120,9 +120,9 @@
 .pipeline-step.active .step-status { color: var(--primary); }
 
 @keyframes pulse-ring {
-  0%   { box-shadow: 0 0 0 0   rgba(32, 140, 188, 0.35); }
-  70%  { box-shadow: 0 0 0 8px rgba(32, 140, 188, 0); }
-  100% { box-shadow: 0 0 0 0   rgba(32, 140, 188, 0); }
+  0%   { box-shadow: 0 0 0 0   rgba(0, 180, 216, 0.35); }
+  70%  { box-shadow: 0 0 0 8px rgba(0, 180, 216, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(0, 180, 216, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -43,7 +43,7 @@
 .upload-dropzone.drag-over {
   border-color: var(--primary);
   background:   var(--primary-3);
-  box-shadow:   0 0 0 4px rgba(32, 140, 188, 0.10);
+  box-shadow:   0 0 0 4px rgba(0, 180, 216, 0.12);
 }
 
 .upload-dropzone.has-file {

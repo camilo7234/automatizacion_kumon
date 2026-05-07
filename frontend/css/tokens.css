@@ -11,71 +11,73 @@
 :root {
 
   /* ── SUPERFICIES ── */
-  --bg:           #f4f8fc;
-  --surface:      #ffffff;
-  --surface-2:    #f5f9ff;
-  --surface-3:    #eaf1fb;
+  --bg:           #0F1117;
+  --surface:      #1A1D27;
+  --surface-2:    #21253A;
+  --surface-3:    #2a2f45;
 
   /* ── TEXTO ── */
-  --text:         #1f2d3d;
-  --muted:        #6b7a8d;
-  --text-faint:   #a0b0c3;
+  --text:         #F0F2FF;
+  --muted:        #8B90A7;
+  --text-faint:   #555a72;
 
   /* ── BORDES ── */
-  --line:         #dce6f2;
+  --line:         rgba(255, 255, 255, 0.08);
 
   /* ── MARCA / PRIMARIO ── */
-  --primary:      #208cbc;
-  --primary-2:    #1a7aad;
-  --primary-3:    #e5f4fb;
-  --accent:       #6dcff6;
+  /* Paleta EduPanel: primary=#00B4D8, primary-dark=#0077A8 */
+  --primary:      #00B4D8;
+  --primary-2:    #0077A8;
+  --primary-3:    #0a2a35;
+  --accent:       #00B4D8;
 
   /* ── ESTADOS BASE ── */
-  --success:      #16a34a;
-  --success-bg:   #f0fdf4;
-  --success-line: #bbf7d0;
+  --success:      #4CAF50;
+  --success-bg:   #0d2b10;
+  --success-line: #1e5c22;
 
-  --warning:      #d97706;
-  --warning-bg:   #fffbeb;
-  --warning-line: #fde68a;
-  --warning-text: #92400e;
+  --warning:      #FFC107;
+  --warning-bg:   #2b2000;
+  --warning-line: #5c4400;
+  --warning-text: #ffd54f;
 
-  --danger:       #dc2626;
-  --danger-bg:    #fef2f2;
-  --danger-line:  #fecaca;
+  --danger:       #F44336;
+  --danger-bg:    #2b0a09;
+  --danger-line:  #5c1a18;
 
-  --info-bg:      #eff6ff;
-  --info-line:    #bfdbfe;
-  --info-text:    #1d4ed8;
+  --info-bg:      #0a1a2e;
+  --info-line:    #1a3a5c;
+  --info-text:    #60a5fa;
 
   /* ── ESTADOS AVANZADOS (alineado con JS) ── */
-  --warn:         #f59e0b;
-  --warn-bg:      #fff7ed;
-  --alert:        #ef4444;
-  --alert-bg:     #fef2f2;
+  --warn:         #FFC107;
+  --warn-bg:      #2b2000;
+  --alert:        #F44336;
+  --alert-bg:     #2b0a09;
 
   /* ── SEMÁFORO ── */
-  --semaforo-verde:    #16a34a;
-  --semaforo-amarillo: #d97706;
-  --semaforo-rojo:     #dc2626;
+  --semaforo-verde:    #4CAF50;
+  --semaforo-amarillo: #FFC107;
+  --semaforo-rojo:     #F44336;
 
   /* ── INTERACCIÓN ── */
-  --hover-overlay: rgba(0, 0, 0, 0.04);
-  --active-overlay: rgba(0, 0, 0, 0.08);
-  --disabled-opacity: 0.5;
+  --hover-overlay:    rgba(255, 255, 255, 0.05);
+  --active-overlay:   rgba(255, 255, 255, 0.08);
+  --disabled-opacity: 0.4;
 
   /* ── GRADIENTES ── */
-  --grad-hero:      linear-gradient(135deg, #208cbc 0%, #6dcff6 100%);
-  --grad-result:    linear-gradient(135deg, #1a7aad 0%, #208cbc 100%);
-  --grad-bg:        radial-gradient(circle at top, #ffffff 0%, #f4f8fc 45%, #e6f2ff 100%);
-  --grad-surface-2: linear-gradient(180deg, #fbfdff 0%, #f5f9ff 100%);
+  --grad-hero:      linear-gradient(135deg, #0077A8 0%, #00B4D8 100%);
+  --grad-result:    linear-gradient(135deg, #005f8a 0%, #0077A8 100%);
+  --grad-bg:        radial-gradient(circle at top left,  rgba(0,180,216,0.08) 0%, transparent 45%),
+                    radial-gradient(circle at bottom right, rgba(0,119,168,0.06) 0%, transparent 45%);
+  --grad-surface-2: linear-gradient(180deg, #1e2235 0%, #21253A 100%);
 
   /* ── SOMBRAS ── */
-  --shadow-sm:   0 6px 16px rgba(15, 23, 42, 0.06);
-  --shadow-md:   0 10px 30px rgba(15, 23, 42, 0.09);
-  --shadow-lg:   0 16px 40px rgba(0, 91, 187, 0.12);
+  --shadow-sm:   0 6px 16px rgba(0, 0, 0, 0.30);
+  --shadow-md:   0 10px 30px rgba(0, 0, 0, 0.40);
+  --shadow-lg:   0 16px 40px rgba(0, 180, 216, 0.15);
 
-  /* ── RADIOS (corregido) ── */
+  /* ── RADIOS ── */
   --radius-xs:   4px;
   --radius-sm:   6px;
   --radius-md:   8px;
