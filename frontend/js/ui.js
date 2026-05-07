@@ -371,7 +371,8 @@ export function setBoletinActionsEnabled(enabled) {
 }
 
 export function setPdfDownloadEnabled(enabled) {
-  if (el.downloadPdfBtn) el.downloadPdfBtn.disabled = !enabled;
+  if (el.downloadPdfBtn)    el.downloadPdfBtn.disabled    = !enabled;
+  if (el.downloadImagenBtn) el.downloadImagenBtn.disabled = !enabled;
 }
 
 export function resetBoletinButtons() {
@@ -386,8 +387,10 @@ export function resetBoletinButtons() {
   if (el.downloadPdfBtn) {
     el.downloadPdfBtn.disabled = true;
   }
+  if (el.downloadImagenBtn) {
+    el.downloadImagenBtn.disabled = true;
+  }
 }
-
 
 
 /* ══════════════════════════════════════════════

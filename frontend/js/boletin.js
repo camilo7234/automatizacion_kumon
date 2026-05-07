@@ -9,6 +9,7 @@ import {
   getBoletin,
   patchBoletin,
   downloadBoletinPdf,
+  downloadImagenCualitativa,
 }                                         from './api.js';
 import {
   resolveResultId,
@@ -39,7 +40,6 @@ import {
   boletinStatusLabel,
   etiquetaInfo,
 }                                         from './formatters.js';
-
 
 /* ══════════════════════════════════════════════
    UTILIDAD — normalizar Decimal serializado
@@ -314,7 +314,7 @@ function _bindButtons() {
   el.confirmBoletinBtn?.addEventListener('click', () => {
     setPdfDownloadEnabled(true);
     hide(el.confirmBoletinBtn);
-    setAlert(el.boletinAlert, 'Boletín confirmado. Ya puedes descargar el PDF.', 'success');
+    setAlert(el.boletinAlert, 'Boletín confirmado. Ya puedes descargar el PDF y la imagen.', 'success');
   });
 
   /* Descargar PDF */
@@ -328,8 +328,19 @@ function _bindButtons() {
     const name    = boletin?.cuantitativo?.nombre_sujeto?.trim() || 'estudiante';
     downloadBoletinPdf(resultId, name);
   });
-}
 
+  /* Descargar imagen cualitativa PNG */
+  el.downloadImagenBtn?.addEventListener('click', () => {
+    const resultId = resolveResultId();
+    if (!resultId) {
+      setAlert(el.boletinAlert, MSG.BOLETIN_PDF_ERROR, 'danger');
+      return;
+    }
+    const boletin = getBoletinData();
+    const name    = boletin?.cuantitativo?.nombre_sujeto?.trim() || 'estudiante';
+    downloadImagenCualitativa(resultId, name);
+  });
+}
 /* ══════════════════════════════════════════════
    RENDER EDITOR DE BOLETÍN
    Llamado desde openBoletinBtn → navega a #boletinEditorSection
