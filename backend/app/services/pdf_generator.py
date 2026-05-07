@@ -131,6 +131,14 @@ _ETIQ_LABEL: Dict[str, str] = {
     "refuerzo":      "Necesita refuerzo",
     "atencion":      "Requiere atencion especial",
 }
+# Colores hex puros para matplotlib (sin colors.HexColor — incompatible)
+_ETIQ_MPL_BG: Dict[str, str] = {
+    "fortaleza":     "#16A34A",
+    "en_desarrollo": "#2563EB",
+    "refuerzo":      "#CA8A04",
+    "atencion":      "#DC2626",
+}
+
 
 # ── Fuente de cada prefill automático ────────────────────────────
 # Nota: emojis eliminados — no están garantizados en Helvetica/Linux.
