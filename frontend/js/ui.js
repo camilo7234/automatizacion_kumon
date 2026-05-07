@@ -82,26 +82,27 @@ export const el = {
   completadoPorInput:   null,  // #completadoPorInput
 
 
-  /* ── BOLETÍN ── */
-  boletinSection:       null,  // #boletinSection
-  boletinAlert:         null,  // #boletinAlert
-  boletinContent:       null,  // #boletinContent
-  boletinStatusBar:     null,  // #boletinStatusBar
-  boletinHeroScore:     null,  // #boletinHeroScore
-  boletinSemaforoIcon:  null,  // #boletinSemaforoIcon
-  boletinSemaforoLabel: null,  // #boletinSemaforoLabel
-  boletinMetricsGrid:   null,  // #boletinMetricsGrid
-  boletinSections:      null,  // #boletinSections
-  boletinObservacion:   null,  // #boletinObservacion
-  boletinConfidenceDot: null,  // #boletinConfidenceDot
-  boletinConfidencePct: null,  // #boletinConfidencePct
-  openBoletinBtn:       null,  // #openBoletinBtn
-  confirmBoletinBtn:    null,  // #confirmBoletinBtn
-  downloadPdfBtn:       null,  // #downloadPdfBtn
-  correctionPanel:      null,  // #correctionPanel (conservado, hidden permanente)
-  correctionGrid:       null,  // #correctionGrid
-  saveCorrectionBtn:    null,  // #saveCorrectionBtn
-
+/* ── BOLETÍN ── */
+  boletinSection:            null,  // #boletinSection
+  boletinAlert:              null,  // #boletinAlert
+  boletinContent:            null,  // #boletinContent
+  boletinStatusBar:          null,  // #boletinStatusBar
+  boletinHeroScore:          null,  // #boletinHeroScore
+  boletinSemaforoIcon:       null,  // #boletinSemaforoIcon
+  boletinSemaforoLabel:      null,  // #boletinSemaforoLabel
+  boletinMetricsGrid:        null,  // #boletinMetricsGrid
+  boletinSections:           null,  // #boletinSections
+  boletinObservacion:        null,  // #boletinObservacion
+  boletinConfidenceDot:      null,  // #boletinConfidenceDot
+  boletinConfidencePct:      null,  // #boletinConfidencePct
+  boletinManualReviewBanner: null,  // #boletinManualReviewBanner
+  openBoletinBtn:            null,  // #openBoletinBtn
+  confirmBoletinBtn:         null,  // #confirmBoletinBtn
+  downloadPdfBtn:            null,  // #downloadPdfBtn
+  downloadImagenBtn:         null,  // #downloadImagenBtn
+  correctionPanel:           null,  // #correctionPanel (conservado, hidden permanente)
+  correctionGrid:            null,  // #correctionGrid
+  saveCorrectionBtn:         null,  // #saveCorrectionBtn
 
   /* ── EDITOR DE BOLETÍN ── */
   /* Sección contenedor */
