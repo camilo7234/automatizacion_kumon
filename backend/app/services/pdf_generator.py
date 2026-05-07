@@ -42,7 +42,6 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -70,15 +69,6 @@ _NOMBRE_CENTRO = "Kumon Ipiales"
 
 # ── Ancho útil del PDF (A4 con márgenes 2cm c/lado) ──────────────
 _PAGE_W = A4[0] - 4 * cm   # ≈ 17 cm
-
-# ── Colores matplotlib para gráficas de secciones cualitativas ───
-_ETIQ_MPL_BG: Dict[str, str] = {
-    "fortaleza":     "#22C55E",
-    "en_desarrollo": "#3B82F6",
-    "refuerzo":      "#F59E0B",
-    "atencion":      "#EF4444",
-}
-
 # ══════════════════════════════════════════════════════════════════
 # [1] PALETA DE COLORES Y ESTILOS TIPOGRÁFICOS
 #     Filosofía: azul corporativo Kumon como color primario,

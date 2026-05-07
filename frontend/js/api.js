@@ -449,3 +449,25 @@ export function downloadBoletinPdf(resultId, nombreSujeto = 'boletin') {
   a.click();
   document.body.removeChild(a);
 }
+
+
+/**
+ * Descarga la imagen PNG de valoración cualitativa usando un anchor programático.
+ * Aprovecha el StreamingResponse del backend directamente.
+ * Requiere que el boletín esté en status 'ready'.
+ *
+ * @param {string} resultId
+ * @param {string} nombreSujeto — para el nombre sugerido del archivo
+ */
+export function downloadImagenCualitativa(resultId, nombreSujeto = 'cualitativa') {
+  const url      = ENDPOINTS.getImagenCualitativa(resultId);
+  const filename = `cualitativa_${nombreSujeto.replace(/\s+/g, '_')}.png`;
+  const a        = document.createElement('a');
+  a.href         = url;
+  a.download     = filename;
+  a.target       = '_blank';
+  a.rel          = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}

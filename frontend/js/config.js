@@ -37,11 +37,11 @@ export const ENDPOINTS = {
   getCuestionario:    (resultId)   => `${API_BASE}/api/v1/cuestionario/${resultId}`,
   submitCuestionario: (resultId)   => `${API_BASE}/api/v1/cuestionario/${resultId}`,
 
-  /* ── BOLETÍN ── */
-  getBoletin:   (resultId)         => `${API_BASE}/api/v1/boletin/${resultId}`,
-  getBoletinPdf:(resultId)         => `${API_BASE}/api/v1/boletin/${resultId}/pdf`,
-  patchBoletin: (resultId)         => `${API_BASE}/api/v1/boletin/${resultId}`,
-
+ /* ── BOLETÍN ── */
+  getBoletin:          (resultId) => `${API_BASE}/api/v1/boletin/${resultId}`,
+  getBoletinPdf:       (resultId) => `${API_BASE}/api/v1/boletin/${resultId}/pdf`,
+  patchBoletin:        (resultId) => `${API_BASE}/api/v1/boletin/${resultId}`,
+  getImagenCualitativa:(resultId) => `${API_BASE}/api/v1/boletin/${resultId}/imagen-cualitativa`,
   /* ── HEALTH ── */
   health: ()                       => `${API_BASE}/health`,
 };

@@ -218,7 +218,7 @@ export function initEl() {
   el.saveCuestionarioBtn  = get('saveCuestionarioBtn');
   el.completadoPorInput   = get('completadoPorInput');
 
-  /* Boletín */
+/* Boletín */
   el.boletinSection       = get('boletinSection');
   el.boletinAlert         = get('boletinAlert');
   el.boletinContent       = get('boletinContent');
@@ -234,12 +234,12 @@ export function initEl() {
   el.openBoletinBtn       = get('openBoletinBtn');
   el.confirmBoletinBtn    = get('confirmBoletinBtn');
   el.downloadPdfBtn       = get('downloadPdfBtn');
+  el.downloadImagenBtn    = get('downloadImagenBtn');
   el.correctionPanel      = get('correctionPanel');
   el.correctionGrid       = get('correctionGrid');
   el.saveCorrectionBtn    = get('saveCorrectionBtn');
 
-  /* Editor de boletín */
-  el.boletinEditorSection  = get('boletinEditorSection');
+  /* Editor de boletín */  el.boletinEditorSection  = get('boletinEditorSection');
   el.editorTabPadre        = get('editorTabPadre');
   el.editorTabOrientador   = get('editorTabOrientador');
   el.editorBackBtn         = get('editorBackBtn');
