@@ -174,28 +174,26 @@ def _merge_prefills(
             if valor is None:
                 continue
 
-        for item_id in METRICA_A_ITEMS.get(metrica, []):
-            if items_del_cuestionario and item_id not in items_del_cuestionario:
-                continue
-            # BUG-1 FIX: convertir a float ANTES de setdefault para evitar
-            # que se cree una lista vacía si la conversión falla.
-            try:
-                valor_f    = float(valor)
-                confianza_f = float(confianza)
-            except (TypeError, ValueError):
-                continue
-            item_acumulado.setdefault(item_id, []).append(valor_f)
-            item_confianza.setdefault(item_id, []).append(confianza_f)
-            item_fuente[item_id] = fuente
+            for item_id in METRICA_A_ITEMS.get(metrica, []):
+                if items_del_cuestionario and item_id not in items_del_cuestionario:
+                    continue
+                try:
+                    valor_f     = float(valor)
+                    confianza_f = float(confianza)
+                except (TypeError, ValueError):
+                    continue
+                item_acumulado.setdefault(item_id, []).append(valor_f)
+                item_confianza.setdefault(item_id, []).append(confianza_f)
+                item_fuente[item_id] = fuente
 
-    for item_id, valores in item_acumulado.items():
-        if not valores:   # guardia defensiva extra
-            continue
-        merged[item_id] = {
-            "valor": round(sum(valores) / len(valores), 2),
-            "confianza": round(sum(item_confianza[item_id]) / len(item_confianza[item_id]), 3),
-            "fuente": item_fuente.get(item_id, "sistema"),
-        }        
+        for item_id, valores in item_acumulado.items():
+            if not valores:
+                continue
+            merged[item_id] = {
+                "valor": round(sum(valores) / len(valores), 2),
+                "confianza": round(sum(item_confianza[item_id]) / len(item_confianza[item_id]), 3),
+                "fuente": item_fuente.get(item_id, "sistema"),
+            }
 
     # ── Respuestas guardadas del orientador (prioridad) ──
     if obs and obs.respuestas:

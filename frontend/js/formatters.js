@@ -382,28 +382,32 @@ export function boletinStatusLabel(status) {
    ETIQUETA CUALITATIVA
    Mapea etiqueta_cualitativa del backend a un
    label y tipo de tag para el visor del boletín.
+   Valores reales del backend (report_generator.py):
+     fortaleza | en_desarrollo | refuerzo | atencion
    ══════════════════════════════════════════════ */
 const ETIQUETA_MAP = {
-  fortaleza:    { label: 'Fortaleza',          type: 'success' },
-  proceso:      { label: 'En proceso',          type: 'warning' },
-  atencion:     { label: 'Requiere atención',   type: 'danger'  },
-  desarrollo:   { label: 'En desarrollo',       type: 'info'    },
-  logrado:      { label: 'Logrado',             type: 'success' },
-  no_evaluado:  { label: 'No evaluado',         type: 'default' },
+  fortaleza:      { label: 'Fortaleza',          type: 'success' },
+  en_desarrollo:  { label: 'En desarrollo',      type: 'info'    },
+  refuerzo:       { label: 'Requiere refuerzo',  type: 'warning' },
+  atencion:       { label: 'Requiere atención',  type: 'danger'  },
+  // legados / compatibilidad
+  proceso:        { label: 'En proceso',         type: 'warning' },
+  desarrollo:     { label: 'En desarrollo',      type: 'info'    },
+  logrado:        { label: 'Logrado',            type: 'success' },
+  no_evaluado:    { label: 'No evaluado',        type: 'default' },
 };
-
-
 
 /**
  * Retorna { label, type } para una etiqueta cualitativa.
- * etiquetaInfo("fortaleza")   → { label: "Fortaleza", type: "success" }
- * etiquetaInfo("no_evaluado") → { label: "No evaluado", type: "default" }
- * etiquetaInfo(null)          → { label: "—", type: "default" }
+ * etiquetaInfo("fortaleza")    → { label: "Fortaleza", type: "success" }
+ * etiquetaInfo("en_desarrollo")→ { label: "En desarrollo", type: "info" }
+ * etiquetaInfo("no_evaluado")  → { label: "No evaluado", type: "default" }
+ * etiquetaInfo(null)           → { label: "—", type: "default" }
  */
 export function etiquetaInfo(etiqueta) {
   if (!etiqueta) return { label: '—', type: 'default' };
   return ETIQUETA_MAP[etiqueta.toLowerCase()] ?? {
-    label: snakeToWords(etiqueta),  // snake_case → palabras legibles
+    label: snakeToWords(etiqueta),
     type:  'default',
   };
 }

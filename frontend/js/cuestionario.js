@@ -174,12 +174,7 @@ function _normalizeQuestions(questions) {
     prefill_fuente:    q.prefill_fuente    ?? null,
     prefill_confianza: q.prefill_confianza ?? null,
   }));
-
-
-
-  return questions;
 }
-
 
 /* ══════════════════════════════════════════════
    RENDER PREGUNTAS — agrupa por sección
@@ -471,29 +466,37 @@ async function _handleSubmit(e) {
   e.preventDefault();
   clearAlert(el.cuestionarioAlert);
 
-
   const resultId = resolveResultId();
   if (!resultId) {
     setAlert(el.cuestionarioAlert, 'Sin result_id.', 'danger');
     return;
   }
 
-
   const respuestas     = _collectAnswers();
   const completado_por = el.completadoPorInput?.value?.trim() || null;
 
-
-  /* Validar que al menos una respuesta no sea vacía */
-  const hasAnswer = Object.values(respuestas).some(v =>
-    v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)
-  );
-
-
-  if (!hasAnswer) {
+  /* Validar que completado_por no esté vacío */
+  if (!completado_por) {
     setAlert(el.cuestionarioAlert, MSG.CUESTIONARIO_EMPTY, 'warning');
     return;
   }
 
+  /* Validar que TODAS las preguntas requeridas tengan respuesta */
+  const preguntasRequeridas = _questions.filter(q => q.required !== false);
+  const sinResponder = preguntasRequeridas.filter(q => {
+    const v = respuestas[q.id];
+    return v === null || v === undefined || v === '' ||
+           (Array.isArray(v) && v.length === 0);
+  });
+
+  if (sinResponder.length > 0) {
+    setAlert(
+      el.cuestionarioAlert,
+      `Faltan ${sinResponder.length} pregunta(s) por responder antes de guardar.`,
+      'warning'
+    );
+    return;
+  }
 
   /* Construir payload alineado con RespuestaCuestionarioRequest:
      { respuestas, completado_por, observacion_libre }
@@ -504,24 +507,18 @@ async function _handleSubmit(e) {
     observacion_libre: _getObservacionCualitativa(),
   };
 
-
   setCuestionarioSubmitting(true);
-
 
   const { ok, data, error } = await submitCuestionario(resultId, payload);
 
-
   setCuestionarioSubmitting(false);
-
 
   if (!ok || !data) {
     setAlert(el.cuestionarioAlert, error ?? MSG.CUESTIONARIO_ERROR, 'danger');
     return;
   }
 
-
   setCuestionarioDone(true);
-
 
   /* Actualizar UI a modo "completado" */
   setTag(el.cuestionarioStatusTag, '✅ Completado', 'success');
@@ -530,15 +527,12 @@ async function _handleSubmit(e) {
     el.saveCuestionarioBtn.textContent = '✅ Ya guardado';
   }
 
-
   setAlert(el.cuestionarioAlert, MSG.CUESTIONARIO_SUCCESS, 'success');
-
 
   /* Notificar a app.js — sin argumentos.
      app.js llama loadBoletin(resultId) internamente. */
   _onCuestionarioDone?.();
 }
-
 
 
 

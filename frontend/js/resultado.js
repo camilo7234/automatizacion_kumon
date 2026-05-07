@@ -133,6 +133,9 @@ function _renderHero(data) {
 /* ══════════════════════════════════════════════
    BANNER DE REVISIÓN MANUAL
    Solo se muestra si needs_manual_review === true
+   Muestra el confidence_score con color semántico
+   para orientar al revisor sobre cuánto confiar
+   en los valores pre-llenados automáticamente.
    ══════════════════════════════════════════════ */
 function _renderManualReviewBanner(data) {
   const needs = Boolean(data.needs_manual_review);
@@ -143,17 +146,30 @@ function _renderManualReviewBanner(data) {
       ? parseFloat(data.confidence_score)
       : null;
 
+    // Color semántico usando los umbrales de config.js
+    let scoreHtml = '';
+    if (score !== null) {
+      const pct   = Math.round(score * 100);
+      const color = score >= CONFIDENCE.HIGH   ? '#437a22'
+                  : score >= CONFIDENCE.MEDIUM ? '#b07a00'
+                  :                              '#a13544';
+      scoreHtml = `
+        <span style="margin-left:8px; font-size:0.85em; color:${color}; font-weight:bold;">
+          Confianza del análisis: ${pct}%
+        </span>`;
+    }
+
     el.manualReviewBanner.innerHTML = `
       <span class="banner-icon">⚠️</span>
       <span>
         <strong>Revisión necesaria.</strong>
         Algunos datos no se pudieron capturar automáticamente.
         Completa los campos del formulario y ajusta los valores antes de generar el boletín.
+        ${scoreHtml}
       </span>
     `;
   }
 }
-
 /* ══════════════════════════════════════════════
    SEMÁFORO
    ══════════════════════════════════════════════ */
