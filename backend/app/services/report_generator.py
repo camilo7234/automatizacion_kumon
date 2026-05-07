@@ -194,28 +194,40 @@ def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
     score_index: puntaje en escala interna 0-100 mapeado desde el semáforo.
     Se usa en _build_combinado_block para la fórmula 65/35.
     No reemplaza 'percentage', que se conserva como dato de display crudo.
+
+    BUG-1 FIX: test_date se persiste formateado como texto legible
+    en lugar de ISO 8601, para que todos los consumers (PDF, UI)
+    lo muestren directamente sin parsear.
     """
     pct         = _to_float(c.percentage)
     study_time  = _to_float(c.study_time_min)
     target_time = _to_float(c.target_time_min)
 
-
     time_ratio = None
     if study_time is not None and target_time is not None and target_time > 0:
         time_ratio = study_time / target_time
-
 
     # score_index usa la escala semáforo (verde=100, amarillo=85, rojo=70)
     # para que el combinado 65/35 sea consistente con el pipeline.
     score_index = _semaforo_to_score(c.semaforo)
 
+    # BUG-1 FIX: formatear la fecha aquí, una sola vez, antes de persistir.
+    # Todos los consumers leen este campo ya legible — ninguno necesita parsear.
+    if c.test_date is not None:
+        try:
+            fecha_formateada = c.test_date.strftime("%d de %B de %Y")
+        except AttributeError:
+            # Defensivo: si por alguna razón llega un string en lugar de datetime
+            fecha_formateada = str(c.test_date)
+    else:
+        fecha_formateada = None
 
     return {
         "subject":        c.subject,
         "test_code":      c.test_code,
         "display_name":   c.display_name,
         "ws":             c.ws,
-        "test_date":      c.test_date.isoformat() if c.test_date else None,
+        "test_date":      fecha_formateada,
         "study_time_min": study_time,
         "target_time_min": target_time,
         "time_ratio":     round(time_ratio, 3) if time_ratio is not None else None,
@@ -232,7 +244,6 @@ def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
         "tipo_sujeto":           c.tipo_sujeto,
         "nombre_sujeto":         c.nombre_sujeto,
     }
-
 
 
 # ══════════════════════════════════════════════════════════════════

@@ -1009,6 +1009,7 @@ class ObservacionCualitativa(Base):
 #
 # El bloque de cámara frontal (gaze) estará disponible cuando
 # se valide el hardware de las tablets.
+# backend/database/models.py
 # ──────────────────────────────────────────────────────────────────
 
 

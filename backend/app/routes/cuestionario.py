@@ -539,6 +539,10 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
     # No se recalcula, no se escribe en BD, no se pisa generated_at.
     # La verdad persistida en Bulletin es la fuente final.
     if bulletin and bulletin.datos_boletin:
+        # BUG-4B FIX: forzar lectura fresca desde BD para que correcciones
+        # del orientador (PATCH) sean siempre visibles en esta respuesta,
+        # incluso si el objeto bulletin estaba cacheado en la sesión actual.
+        db.refresh(bulletin)
         datos = bulletin.datos_boletin
         return BoletinResponse(
             boletin_id=bulletin.id_bulletin,
@@ -707,8 +711,8 @@ def patch_boletin(
     No se recalcula nada: solo se escribe lo que el orientador indica.
 
     BUG-3 FIX: correcciones válidas ya no se pierden si una del lote falla.
-    Se aplican todas las que sean posibles y se reportan los errores
-    sin descartar el trabajo hecho.
+    BUG-4A FIX: columnas de índice (puntaje_combinado, etiqueta_combinada,
+                nombre_sujeto) se sincronizan con datos_boletin tras cada PATCH.
     """
     result = (
         db.query(TestResult)
@@ -723,6 +727,8 @@ def patch_boletin(
 
     template = _get_template_or_409(result)
 
+    # BUG-4A FIX: expire fuerza que SQLAlchemy NO use objeto cacheado en sesión.
+    # Si se llama PATCH varias veces en la misma sesión, siempre lee desde BD.
     bulletin = (
         db.query(Bulletin)
         .filter(Bulletin.id_result == result.id_result)
@@ -733,6 +739,8 @@ def patch_boletin(
             status_code=status.HTTP_409_CONFLICT,
             detail="El boletín no existe aún. Genera el boletín antes de corregirlo.",
         )
+
+    db.refresh(bulletin)  # BUG-4A FIX: forzar lectura fresca antes de copiar
 
     # Trabajar sobre una copia mutable del JSON persistido
     datos = copy.deepcopy(bulletin.datos_boletin)
@@ -764,47 +772,51 @@ def patch_boletin(
 
         except (KeyError, IndexError, ValueError, TypeError) as exc:
             errores.append(f"'{correccion.campo}': {exc}")
-            # BUG-3 FIX: NO hacemos raise aquí. Continuamos con la siguiente
-            # corrección del lote. Al final se informa cuáles fallaron pero
-            # se persiste todo lo que sí fue válido.
             continue
 
-    # BUG-3 FIX: solo bloqueamos el commit si NO se pudo aplicar
-    # absolutamente ninguna corrección del lote.
-    # Si al menos una fue válida → persistimos y reportamos los errores
-    # parciales en el mensaje de respuesta sin lanzar 422.
+    # BUG-3 FIX: solo bloqueamos el commit si NO se pudo aplicar ninguna corrección.
     if errores and correcciones_aplicadas == 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"No se pudo aplicar ninguna corrección: {'; '.join(errores)}",
         )
 
-    # Auditoría: registrar solo las correcciones que sí se aplicaron
+    # Auditoría
     campos_aplicados = [
         c.campo for c in payload.correcciones
         if f"'{c.campo}':" not in " ".join(errores)
     ]
-
     audit = datos.get("_auditoria_correcciones", [])
     audit.append({
         "corregido_por": payload.corregido_por,
         "corregido_at":  datetime.now(timezone.utc).isoformat(),
         "campos": campos_aplicados,
-        # BUG-3 FIX: registrar también qué campos fallaron para trazabilidad
         "campos_fallidos": errores if errores else None,
     })
     datos["_auditoria_correcciones"] = audit
 
-    # Persistir
-    bulletin.datos_boletin = datos
-    bulletin.status        = "ready"
+    # ── BUG-4A FIX: sincronizar columnas de índice con datos corregidos ──
+    # Cada vez que el orientador guarda cambios, las columnas escalares de
+    # Bulletin deben reflejar lo que hay en datos_boletin, no el snapshot
+    # original. Esto garantiza que PDF, UI y queries de BD siempre leen
+    # exactamente el mismo estado.
+    comb_nuevo  = datos.get("combinado",    {}) or {}
+    cuant_nuevo = datos.get("cuantitativo", {}) or {}
+
+    bulletin.datos_boletin     = datos
+    bulletin.status            = "ready"
+    bulletin.puntaje_combinado = comb_nuevo.get("puntaje",  bulletin.puntaje_combinado)
+    bulletin.etiqueta_combinada = comb_nuevo.get("etiqueta", bulletin.etiqueta_combinada)
+    bulletin.puntaje_cuantitativo = cuant_nuevo.get("score_index", bulletin.puntaje_cuantitativo)
+    # nombre_sujeto en cuant es display — no hay columna de índice propia,
+    # pero se preserva en datos_boletin para que PDF lo lea correctamente.
+
     db.add(bulletin)
     db.commit()
     db.refresh(bulletin)
 
     datos_final = bulletin.datos_boletin
 
-    # BUG-3 FIX: mensaje enriquecido cuando hubo errores parciales
     mensaje_base = f"Boletín corregido por {payload.corregido_por}. {correcciones_aplicadas} campo(s) actualizado(s)."
     if errores:
         mensaje_base += f" Advertencia — {len(errores)} campo(s) no aplicado(s): {'; '.join(errores)}"
@@ -823,7 +835,6 @@ def patch_boletin(
         correcciones_aplicadas=correcciones_aplicadas,
         message=mensaje_base,
     )
-
 
 # ──────────────────────────────────────────────────────────────
 # Helpers para generación de PDF
@@ -1604,26 +1615,11 @@ def _build_pdf_buffer_with_reportlab(
 @router.get("/boletin/{result_id}/pdf")
 def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
     """
-    Genera el boletín en PDF y lo retorna como descarga directa al dispositivo.
-    No guarda el archivo en el servidor — StreamingResponse en memoria.
-
+    Genera el boletín en PDF y lo retorna como descarga directa.
+    Motor único: ReportLab (pdf_generator.generate_pdf).
+    No guarda archivo en disco — StreamingResponse en memoria.
     Requiere que el cuestionario cualitativo esté completo.
-
-    Jerarquía de renderizado:
-      1) WeasyPrint  → HTML visual idéntico al frontend (requiere GTK3 en Windows)
-      2) pdf_generator.generate_pdf() → ReportLab visual completo con gráficas Kumon
-      3) _build_pdf_buffer_with_reportlab → tabla plana (último recurso absoluto)
     """
-    weasyprint_error: Exception | None = None
-    pdf_visual_error: Exception | None = None
-    WeasyprintHTML = None
-
-    try:
-        from weasyprint import HTML as WeasyprintHTML
-    except (ImportError, OSError) as exc:
-        weasyprint_error = exc
-        WeasyprintHTML = None
-
     # ── Validar que existe el resultado ──────────────────────────
     result = (
         db.query(TestResult)
@@ -1650,40 +1646,8 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             detail="El PDF solo está disponible cuando el cuestionario cualitativo está completo.",
         )
 
-    bulletin = (
-        db.query(Bulletin)
-        .filter(Bulletin.id_result == result.id_result)
-        .first()
-    )
-
     qual = _get_qualitative_result(db, result)
-
-    if (
-        obs.puntaje_cualitativo is not None
-        and obs.etiqueta_cualitativa
-        and obs.detalle_secciones is not None
-    ):
-        total_porcentaje = float(obs.puntaje_cualitativo)
-        etiqueta_total   = obs.etiqueta_cualitativa
-        secciones        = obs.detalle_secciones
-    else:
-        try:
-            calc = calcular_puntaje_cualitativo(
-                subject=template.subject,
-                test_code=template.code,
-                respuestas=_flatten_respuestas(obs.respuestas),
-            )
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"No fue posible calcular el boletín cualitativo: {exc}",
-            ) from exc
-
-        total_porcentaje = float(calc["total_porcentaje"])
-        etiqueta_total   = calc["etiqueta_total"]
-        secciones        = calc["secciones"]
-
-    job = result.job
+    job  = result.job
 
     # ── Obtener nombre del sujeto ────────────────────────────────
     tipo_sujeto   = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
@@ -1709,47 +1673,76 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         if nombre_sujeto:
             break
 
-    qnt = QuantitativeInput(
-        subject=template.subject,
-        test_code=template.code,
-        display_name=template.display_name,
-        ws=result.ws,
-        test_date=job.created_at if job and job.created_at else result.test_date,
-        study_time_min=result.study_time_min,
-        target_time_min=result.target_time_min,
-        correct_answers=result.correct_answers,
-        total_questions=result.total_questions,
-        percentage=result.percentage,
-        current_level=result.current_level,
-        starting_point=result.starting_point,
-        semaforo=result.semaforo,
-        recommendation=result.recommendation,
-        confidence_score=result.confidence_score,
-        needs_manual_review=result.needs_manual_review,
-        tipo_sujeto=result.tipo_sujeto,
-        nombre_sujeto=nombre_sujeto,
+    # ── Leer bulletin con refresh ────────────────────────────────
+    bulletin = (
+        db.query(Bulletin)
+        .filter(Bulletin.id_result == result.id_result)
+        .first()
     )
+    if bulletin:
+        db.refresh(bulletin)
 
-    cual_input = QualitativeInput(
-        total_porcentaje=total_porcentaje,
-        etiqueta_total=etiqueta_total,
-        secciones=secciones,
-        auto_flags=qual.auto_captured_flags if qual and qual.auto_captured_flags else [],
-        prefills=qual.prefills if qual and qual.prefills else {},
-        gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
-    )
-
-    # ── BUG-3b FIX: guardia defensiva sobre datos_boletin ────────
-    # Si bulletin existe pero datos_boletin es None (commit parcial),
-    # se recalcula en lugar de propagar None a las capas de renderizado.
+    # ── Resolver datos_boletin ───────────────────────────────────
     if bulletin and bulletin.datos_boletin:
         datos = bulletin.datos_boletin
     else:
-        # BUG-3a FIX: reconstruir datos frescos con build_report_data
-        # garantiza que nombre_sujeto esté SIEMPRE dentro de
-        # datos["cuantitativo"]["nombre_sujeto"], independientemente
-        # de cuándo fue creado el bulletin en BD.
+        if (
+            obs.puntaje_cualitativo is not None
+            and obs.etiqueta_cualitativa
+            and obs.detalle_secciones is not None
+        ):
+            total_porcentaje = float(obs.puntaje_cualitativo)
+            etiqueta_total   = obs.etiqueta_cualitativa
+            secciones        = obs.detalle_secciones
+        else:
+            try:
+                calc = calcular_puntaje_cualitativo(
+                    subject=template.subject,
+                    test_code=template.code,
+                    respuestas=_flatten_respuestas(obs.respuestas),
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"No fue posible calcular el boletín cualitativo: {exc}",
+                ) from exc
+
+            total_porcentaje = float(calc["total_porcentaje"])
+            etiqueta_total   = calc["etiqueta_total"]
+            secciones        = calc["secciones"]
+
+        qnt = QuantitativeInput(
+            subject=template.subject,
+            test_code=template.code,
+            display_name=template.display_name,
+            ws=result.ws,
+            test_date=job.created_at if job and job.created_at else result.test_date,
+            study_time_min=result.study_time_min,
+            target_time_min=result.target_time_min,
+            correct_answers=result.correct_answers,
+            total_questions=result.total_questions,
+            percentage=result.percentage,
+            current_level=result.current_level,
+            starting_point=result.starting_point,
+            semaforo=result.semaforo,
+            recommendation=result.recommendation,
+            confidence_score=result.confidence_score,
+            needs_manual_review=result.needs_manual_review,
+            tipo_sujeto=result.tipo_sujeto,
+            nombre_sujeto=nombre_sujeto,
+        )
+
+        cual_input = QualitativeInput(
+            total_porcentaje=total_porcentaje,
+            etiqueta_total=etiqueta_total,
+            secciones=secciones,
+            auto_flags=qual.auto_captured_flags if qual and qual.auto_captured_flags else [],
+            prefills=qual.prefills if qual and qual.prefills else {},
+            gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
+        )
+
         datos = build_report_data(qnt, cual_input)
+
         if not bulletin:
             bulletin = Bulletin(
                 id_result=result.id_result,
@@ -1764,47 +1757,27 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             )
             db.add(bulletin)
         else:
-            # bulletin existe pero datos_boletin era None → reparar
-            bulletin.datos_boletin = datos
-            bulletin.status        = "ready"
-            bulletin.generated_at  = datetime.now(timezone.utc)
+            bulletin.datos_boletin        = datos
+            bulletin.puntaje_cuantitativo = datos.get("cuantitativo", {}).get("score_index")
+            bulletin.puntaje_combinado    = datos.get("combinado", {}).get("puntaje")
+            bulletin.etiqueta_combinada   = datos.get("combinado", {}).get("etiqueta")
+            bulletin.status               = "ready"
+            bulletin.generated_at         = datetime.now(timezone.utc)
+
         db.commit()
         db.refresh(bulletin)
 
-    # ── Nombre del archivo sugerido ──────────────────────────────
-    nombre_safe = (nombre_sujeto or "sin-nombre").replace("/", "-").replace("\\", "-").replace(" ", "_")
-    ws_safe     = (result.ws or "test").replace("/", "-")
-    fecha_str   = str(result.test_date or "").replace("-", "") or "sin-fecha"
-    filename    = f"boletin_{nombre_safe}_{ws_safe}_{fecha_str}.pdf"
-
-    # ── Datos extra para pdf_generator ───────────────────────────
+    # ── Nombre del archivo ───────────────────────────────────────
     job_created_at    = job.created_at if job and job.created_at else None
+    nombre_safe       = (nombre_sujeto or "sin-nombre").replace("/", "-").replace("\\", "-").replace(" ", "_")
+    ws_safe           = (result.ws or "test").replace("/", "-")
+    fecha_str         = job_created_at.strftime("%Y%m%d") if job_created_at else "sin-fecha"
+    filename          = f"boletin_{nombre_safe}_{ws_safe}_{fecha_str}.pdf"
+
     orientador_nombre = obs.completado_por or None
     hubo_correcciones = bool(datos.get("_auditoria_correcciones"))
 
-    # ════════════════════════════════════════════════════════════
-    # CAPA 1 — WeasyPrint (HTML idéntico al frontend)
-    # ════════════════════════════════════════════════════════════
-    if WeasyprintHTML is not None:
-        try:
-            html_str   = _build_pdf_html(datos, result, template, nombre_sujeto)
-            pdf_buffer = io.BytesIO()
-            WeasyprintHTML(string=html_str).write_pdf(pdf_buffer)
-            pdf_buffer.seek(0)
-            return StreamingResponse(
-                pdf_buffer,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f'attachment; filename="{filename}"',
-                    "X-PDF-Engine": "weasyprint",
-                },
-            )
-        except Exception as exc:
-            weasyprint_error = exc
-
-    # ════════════════════════════════════════════════════════════
-    # CAPA 2 — pdf_generator.generate_pdf() (ReportLab visual completo)
-    # ════════════════════════════════════════════════════════════
+    # ── Renderizado — ReportLab único ───────────────────────────
     try:
         pdf_buffer = _generate_pdf_visual(
             report_data=datos,
@@ -1819,39 +1792,89 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"',
-                "X-PDF-Engine": "reportlab-visual",
+                "X-PDF-Engine": "reportlab",
             },
         )
     except Exception as exc:
-        pdf_visual_error = exc
-
-    # ════════════════════════════════════════════════════════════
-    # CAPA 3 — Fallback tabla plana (último recurso absoluto)
-    # Solo llega aquí si tanto WeasyPrint como pdf_generator fallan.
-    # ════════════════════════════════════════════════════════════
-    try:
-        pdf_buffer = _build_pdf_buffer_with_reportlab(
-            datos=datos,
-            result=result,
-            template=template,
-            nombre_sujeto=nombre_sujeto,
-        )
-        return StreamingResponse(
-            pdf_buffer,
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "X-PDF-Engine": "reportlab-fallback",
-            },
-        )
-    except Exception as fallback_exc:
-        detalle = "No fue posible generar el PDF."
-        if weasyprint_error:
-            detalle += f" WeasyPrint: {weasyprint_error!s}."
-        if pdf_visual_error:
-            detalle += f" PDF visual: {pdf_visual_error!s}."
-        detalle += f" Fallback: {fallback_exc!s}."
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=detalle,
+            detail=f"No fue posible generar el PDF: {exc!s}",
         )
+
+# ──────────────────────────────────────────────────────────────
+# GET /boletin/{result_id}/imagen-cualitativa
+# ──────────────────────────────────────────────────────────────
+@router.get("/boletin/{result_id}/imagen-cualitativa")
+def get_imagen_cualitativa(result_id: UUID, db: Session = Depends(get_db)):
+    """
+    Genera y retorna la imagen de valoración cualitativa Kumon
+    como PNG en memoria — sin guardar en disco ni en BD.
+
+    La imagen refleja exactamente datos_boletin.cualitativo tal
+    como fue guardado por el orientador (incluyendo correcciones).
+
+    Requiere que el bulletin exista y esté en status 'ready'.
+    """
+    result = (
+        db.query(TestResult)
+        .filter(TestResult.id_result == result_id)
+        .first()
+    )
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resultado no encontrado.",
+        )
+
+    bulletin = (
+        db.query(Bulletin)
+        .filter(Bulletin.id_result == result.id_result)
+        .first()
+    )
+    if not bulletin or not bulletin.datos_boletin:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El boletín no existe aún. Genera el PDF primero.",
+        )
+
+    # Siempre leer fresco — garantiza correcciones del orientador
+    db.refresh(bulletin)
+
+    datos = bulletin.datos_boletin
+    cual  = datos.get("cualitativo") or {}
+    cuant = datos.get("cuantitativo") or {}
+
+    if not cual.get("secciones"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El boletín no contiene valoración cualitativa.",
+        )
+
+    # Importación local para no romper entornos sin matplotlib
+    try:
+        from app.services.pdf_generator import _generar_imagen_cualitativa
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Motor de imagen no disponible: {exc!s}",
+        )
+
+    nombre_sujeto = cuant.get("nombre_sujeto") or "—"
+    fecha_str     = cuant.get("test_date") or "—"
+
+    img_buffer = _generar_imagen_cualitativa(
+        cual=cual,
+        nombre_sujeto=nombre_sujeto,
+        fecha_str=fecha_str,
+    )
+
+    nombre_safe = nombre_sujeto.replace("/", "-").replace(" ", "_")
+    filename_img = f"cualitativa_{nombre_safe}.png"
+
+    return StreamingResponse(
+        img_buffer,
+        media_type="image/png",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename_img}"',
+        },
+    )

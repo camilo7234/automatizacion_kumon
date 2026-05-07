@@ -727,7 +727,7 @@ def generate_pdf(
 def _seccion_encabezado(
     styles:            Dict,
     prospecto_nombre:  str,
-    job_created_at:    Optional[datetime],          # CORREGIDO: Optional
+    job_created_at:    Optional[datetime],
     cuant:             Dict[str, Any],
     orientador_nombre: Optional[str],
 ) -> list:
@@ -738,14 +738,16 @@ def _seccion_encabezado(
     Campos usados de cuant:
       subject, display_name, ws, test_code, current_level,
       starting_point, nombre_sujeto (fallback si prospecto_nombre vacío)
+
+    BUG-1 FIX: eliminada fila 'Fecha del test (BD)' — la única fecha
+    visible es 'Fecha de evaluación' formateada desde job_created_at,
+    que ya viene formateada también en datos_boletin.cuantitativo.test_date.
     """
     _LOGO_ANCHO = 3.5 * cm
     _LOGO_ALTO  = 2.0 * cm
     elementos   = []
 
     # ── Resolución definitiva del nombre ─────────────────────────
-    # Fuente 1: parámetro del caller (ya resuelto en generate_pdf)
-    # Fuente 2: campo persistido en datos_boletin.cuantitativo
     nombre_final: str = (
         prospecto_nombre
         or cuant.get("nombre_sujeto")
@@ -780,26 +782,25 @@ def _seccion_encabezado(
     elementos.append(Spacer(1, 0.3 * cm))
 
     # ── Tabla de datos del estudiante ────────────────────────────
-    fecha_str   = job_created_at.strftime("%d de %B de %Y") if job_created_at else "—"
-    materia     = (cuant.get("subject") or "").capitalize() or "—"
-    nivel_str   = _parsear_display_name(cuant)
-    cod_test    = cuant.get("test_code")      or "—"
-    nivel_act   = cuant.get("current_level")  or "—"
-    fecha_test  = cuant.get("test_date")      or "—"
-    ws          = cuant.get("ws")             or "—"
-    punto_ini   = _parsear_starting_point(cuant.get("starting_point"))
+    # BUG-1 FIX: solo una fecha, tomada de job_created_at (fecha oficial
+    # del procesamiento del video). La variable fecha_test eliminada.
+    fecha_str  = job_created_at.strftime("%d de %B de %Y") if job_created_at else "—"
+    materia    = (cuant.get("subject") or "").capitalize() or "—"
+    nivel_str  = _parsear_display_name(cuant)
+    cod_test   = cuant.get("test_code")     or "—"
+    nivel_act  = cuant.get("current_level") or "—"
+    ws         = cuant.get("ws")            or "—"
+    punto_ini  = _parsear_starting_point(cuant.get("starting_point"))
 
     filas = [
         ["Estudiante evaluado:",   nombre_final],
         ["Fecha de evaluación:",   fecha_str],
         ["Materia:",               materia],
-        ["Nivel evaluado (WS):",   f"{nivel_str}  ·  WS: {ws}"],     # AÑADIDO: WS destacado
+        ["Nivel evaluado (WS):",   f"{nivel_str}  ·  WS: {ws}"],
         ["Código de test:",        cod_test],
         ["Nivel actual:",          nivel_act],
-        ["Punto de inicio:",       punto_ini],                        # AÑADIDO: visible en encabezado
+        ["Punto de inicio:",       punto_ini],
     ]
-    if fecha_test and fecha_test != "—":
-        filas.append(["Fecha del test (BD):", str(fecha_test)])
     if orientador_nombre:
         filas.append(["Orientador a cargo:", orientador_nombre])
 
@@ -815,7 +816,6 @@ def _seccion_encabezado(
         ("TOPPADDING",    (0, 0), (-1, -1), 3),
         ("LEFTPADDING",   (0, 0), (-1, -1), 8),
         ("GRID",          (0, 0), (-1, -1), 0.3, _BORDE),
-        # Fila 0 (nombre del estudiante) con fondo más destacado
         ("BACKGROUND",    (0, 0), (-1, 0),  _KUMON_AZUL_M),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  _BLANCO),
         ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
@@ -992,22 +992,43 @@ def _seccion_prefills(
 
 # ══════════════════════════════════════════════════════════════════
 # [10] SECCIÓN 4 — VALORACIÓN CUALITATIVA POR ÁREAS
-#      Datos usados: cualitativo.total_porcentaje, etiqueta_total,
-#                    secciones (nombre, etiqueta, porcentaje, puntaje)
-#                    auto_flags (para marcar fuente)
+#      Pedagogía Kumon: 5 dimensiones de actitud y comportamiento
+#      observadas durante la prueba diagnóstica.
+#      Datos: cualitativo.total_porcentaje, etiqueta_total, secciones
 # ══════════════════════════════════════════════════════════════════
+
+# Descripción pedagógica de cada dimensión Kumon.
+# Clave: nombre normalizado (lower + strip). Fallback: texto genérico.
+_KUMON_DIMENSION_DESC: Dict[str, str] = {
+    "concentración":      "Capacidad de mantener el foco en la tarea sin interrupciones durante toda la prueba.",
+    "concentracion":      "Capacidad de mantener el foco en la tarea sin interrupciones durante toda la prueba.",
+    "autonomía":          "Capacidad de abordar y resolver los ejercicios de forma independiente.",
+    "autonomia":          "Capacidad de abordar y resolver los ejercicios de forma independiente.",
+    "ritmo de trabajo":   "Constancia y velocidad sostenida a lo largo de la prueba sin picos ni paradas.",
+    "confianza":          "Seguridad al ejecutar las respuestas, sin dudas excesivas ni correcciones innecesarias.",
+    "actitud":            "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+    "motivación":         "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+    "motivacion":         "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+}
+
 
 def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     """
-    Tabla de áreas de actitud y comportamiento con nivel, puntaje
-    y fuente (automático u orientador). Incluye resumen global
-    con badge de etiqueta colorido al inicio.
+    Renderiza la valoración cualitativa Kumon con un bloque visual
+    por dimensión: nombre pedagógico, descripción, barra de progreso
+    y badge de etiqueta. Sin referencias a fuentes de captura.
     """
     elementos  = []
-    elementos.append(Paragraph("📋  Valoración Cualitativa", styles["seccion"]))
+    elementos.append(Paragraph("📋  Valoración Cualitativa — Actitud y Comportamiento",
+                                styles["seccion"]))
+    elementos.append(Paragraph(
+        "Valoración de las dimensiones de actitud observadas durante la prueba diagnóstica, "
+        "conforme al método Kumon.",
+        styles["aviso_info"],
+    ))
+    elementos.append(Spacer(1, 0.3 * cm))
 
     secciones  = cual.get("secciones") or []
-    auto_flags = [f.lower() for f in (cual.get("auto_flags") or [])]
     etiqueta   = cual.get("etiqueta_total") or ""
     pct_total  = cual.get("total_porcentaje")
 
@@ -1017,14 +1038,14 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         etiq_bg  = _ETIQ_BG.get(etiqueta, _KUMON_AZUL_L)
         etiq_fg  = _ETIQ_FG.get(etiqueta, _KUMON_AZUL)
         elementos.append(_bloque_color(
-            f"Nivel general de actitud: {etiq_lbl}  —  {pct_total:.1f}%",
-            bg=etiq_bg, fg=etiq_fg, font_size=10,
+            f"Nivel general de actitud:  {etiq_lbl}  —  {pct_total:.1f}%",
+            bg=etiq_bg, fg=etiq_fg, font_size=11,
         ))
-        elementos.append(Spacer(1, 0.25 * cm))
+        elementos.append(Spacer(1, 0.2 * cm))
 
-        # Barra de progreso cualitativo
         fila_b = Table(
-            [[Paragraph(f"<b>Actitud global:</b>  {pct_total:.0f}%", styles["campo_label"]),
+            [[Paragraph(f"<b>Actitud global:</b>  {pct_total:.0f}%",
+                        styles["campo_label"]),
               _barra_progreso_rl(
                   pct_total, width=9 * cm,
                   color_barra=_ETIQ_FG.get(etiqueta, _KUMON_AZUL_2),
@@ -1036,49 +1057,66 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ]))
         elementos.append(fila_b)
-        elementos.append(Spacer(1, 0.2 * cm))
+        elementos.append(Spacer(1, 0.3 * cm))
+        elementos.append(HRFlowable(width="100%", thickness=0.4, color=_BORDE))
+        elementos.append(Spacer(1, 0.25 * cm))
 
-    # ── Tabla detallada por área ──────────────────────────────────
-    if secciones:
-        filas_tbl = [
-            [Paragraph("<b>Área evaluada</b>",  styles["campo_label"]),
-             Paragraph("<b>Nivel</b>",           styles["campo_label"]),
-             Paragraph("<b>Puntaje</b>",         styles["campo_label"]),
-             Paragraph("<b>Evaluado por</b>",    styles["campo_label"])],
-        ]
-        estilos_din: List[tuple] = []
-
-        for i, sec in enumerate(secciones, start=1):
-            nombre   = sec.get("nombre") or sec.get("name") or f"Área {i}"
-            etiq_s   = sec.get("etiqueta") or ""
-            pct_s    = sec.get("porcentaje") or sec.get("puntaje")
-            es_auto  = nombre.lower() in auto_flags
-            fuente   = "Automático" if es_auto else "Orientador"
-            lbl_s    = _ETIQ_LABEL.get(etiq_s, etiq_s)
-            bg_s     = _ETIQ_BG.get(etiq_s, _BLANCO)
-            pct_txt  = f"{float(pct_s):.1f}%" if pct_s is not None else "—"
-
-            filas_tbl.append([nombre, lbl_s, pct_txt, fuente])
-            estilos_din.append(("BACKGROUND", (1, i), (1, i), bg_s))
-            estilos_din.append(("TEXTCOLOR",  (1, i), (1, i),
-                                 _ETIQ_FG.get(etiq_s, _NEGRO)))
-            estilos_din.append(("FONTNAME",   (1, i), (1, i), "Helvetica-Bold"))
-            if i % 2 == 0:
-                estilos_din.append(("BACKGROUND", (0, i), (0, i), _GRIS_CLARO))
-                estilos_din.append(("BACKGROUND", (2, i), (3, i), _GRIS_CLARO))
-
-        tbl_c = Table(filas_tbl, colWidths=[6 * cm, 4.5 * cm, 2.5 * cm, 4 * cm])
-        base  = _tabla_base_style(len(filas_tbl), alternate=False)
-        tbl_c.setStyle(TableStyle(base._cmds + estilos_din))
-        elementos.append(tbl_c)
-    else:
+    # ── Bloque por dimensión ──────────────────────────────────────
+    if not secciones:
         elementos.append(Paragraph(
-            "No se registraron métricas de actitud en esta evaluación.",
+            "No se registraron valoraciones de actitud en esta evaluación.",
             styles["narrativa"],
         ))
+        return elementos
+
+    for sec in secciones:
+        nombre  = (sec.get("nombre") or sec.get("name") or "Área evaluada").strip()
+        etiq_s  = sec.get("etiqueta") or ""
+        pct_s   = sec.get("porcentaje") or sec.get("puntaje") or 0.0
+        pct_f   = float(pct_s)
+        lbl_s   = _ETIQ_LABEL.get(etiq_s, etiq_s.capitalize())
+        bg_s    = _ETIQ_BG.get(etiq_s, _KUMON_AZUL_L)
+        fg_s    = _ETIQ_FG.get(etiq_s, _KUMON_AZUL)
+        desc    = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
+
+        # Fila: nombre + badge etiqueta lado a lado
+        nombre_par = Paragraph(f"<b>{nombre}</b>", styles["subseccion"])
+        badge_par  = _bloque_color(lbl_s, bg=bg_s, fg=fg_s,
+                                   ancho=4.5 * cm, font_size=8)
+        fila_enc = Table(
+            [[nombre_par, badge_par]],
+            colWidths=[12 * cm, 5 * cm],
+        )
+        fila_enc.setStyle(TableStyle([
+            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        elementos.append(fila_enc)
+
+        # Descripción pedagógica
+        if desc:
+            elementos.append(Paragraph(desc, styles["narrativa"]))
+
+        # Barra de progreso + puntaje
+        fila_barra = Table(
+            [[Paragraph(f"<b>{pct_f:.0f}%</b>", styles["campo_label"]),
+              _barra_progreso_rl(
+                  pct_f, width=13 * cm,
+                  color_barra=fg_s,
+              )]],
+            colWidths=[1.5 * cm, 15.5 * cm],
+        )
+        fila_barra.setStyle(TableStyle([
+            ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        elementos.append(fila_barra)
+        elementos.append(Spacer(1, 0.3 * cm))
+        elementos.append(HRFlowable(width="100%", thickness=0.3, color=_BORDE))
+        elementos.append(Spacer(1, 0.2 * cm))
 
     return elementos
-
 
 # ══════════════════════════════════════════════════════════════════
 # [11] SECCIÓN 5 — GRÁFICA DE ACTITUD POR SECCIÓN
@@ -1331,3 +1369,144 @@ def _seccion_pie(
         styles["pie"],
     ))
     return elementos
+
+# ══════════════════════════════════════════════════════════════════
+# GENERADOR DE IMAGEN CUALITATIVA — matplotlib
+# Genera un PNG en memoria con la valoración cualitativa Kumon.
+# Sin referencias a fuentes de captura. Solo pedagogía.
+# Retorna io.BytesIO listo para StreamingResponse.
+# ══════════════════════════════════════════════════════════════════
+
+def _generar_imagen_cualitativa(
+    cual:          Dict[str, Any],
+    nombre_sujeto: str = "—",
+    fecha_str:     str = "—",
+) -> io.BytesIO:
+    """
+    Imagen PNG de la valoración cualitativa Kumon.
+    Dimensiones: ancho fijo 900px, alto dinámico según número de áreas.
+
+    Estructura visual:
+      1. Encabezado — nombre del alumno + fecha + materia
+      2. Badge global — etiqueta + puntaje total + barra
+      3. Un bloque por dimensión — nombre, descripción, barra coloreada
+      4. Pie — Kumon Ipiales (sin mencionar sistema ni video)
+    """
+    secciones  = cual.get("secciones") or []
+    etiqueta   = cual.get("etiqueta_total") or ""
+    pct_total  = float(cual.get("total_porcentaje") or 0)
+    etiq_lbl   = _ETIQ_LABEL.get(etiqueta, etiqueta.capitalize())
+
+    n          = len(secciones)
+    fig_h      = 3.5 + n * 1.4   # alto dinámico: encabezado + n bloques
+    fig_w      = 10              # pulgadas fijas → 900px a 90dpi
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    ax.axis("off")
+    fig.patch.set_facecolor("#FFFFFF")
+
+    # Coordenadas en fracción de figura (ymin=0 abajo, ymax=1 arriba)
+    y = 0.97   # cursor vertical, baja con cada bloque
+
+    def _fraccion_h(pulgadas: float) -> float:
+        return pulgadas / fig_h
+
+    def _draw_text(txt, x, yy, size=10, bold=False, color="#1E293B",
+                   ha="left", va="top"):
+        weight = "bold" if bold else "normal"
+        ax.text(x, yy, txt, transform=ax.transAxes,
+                fontsize=size, fontweight=weight, color=color,
+                ha=ha, va=va, clip_on=False)
+
+    def _draw_bar(yy, pct, color_hex, height_frac=0.018):
+        bar_x = 0.04
+        bar_w = 0.92
+        # fondo
+        ax.add_patch(plt.Rectangle(
+            (bar_x, yy - height_frac), bar_w, height_frac,
+            transform=ax.transAxes, color="#E8F0FB",
+            clip_on=False, zorder=2,
+        ))
+        # relleno
+        fill_w = bar_w * min(pct, 100) / 100
+        ax.add_patch(plt.Rectangle(
+            (bar_x, yy - height_frac), fill_w, height_frac,
+            transform=ax.transAxes, color=color_hex,
+            clip_on=False, zorder=3,
+        ))
+
+    def _draw_hline(yy, alpha=0.25):
+        ax.axhline(y=yy, xmin=0.03, xmax=0.97,
+                   transform=ax.transAxes, color="#CBD5E1",
+                   linewidth=0.8, alpha=alpha, clip_on=False)
+
+    # ── 1. Encabezado ─────────────────────────────────────────────
+    ax.add_patch(plt.Rectangle(
+        (0, y - _fraccion_h(0.7)), 1, _fraccion_h(0.7),
+        transform=ax.transAxes, color="#003087", clip_on=False, zorder=1,
+    ))
+    _draw_text("VALORACIÓN CUALITATIVA — ACTITUD Y COMPORTAMIENTO",
+               0.5, y - _fraccion_h(0.08),
+               size=12, bold=True, color="#FFFFFF", ha="center")
+    _draw_text(f"{nombre_sujeto}   ·   Fecha: {fecha_str}",
+               0.5, y - _fraccion_h(0.38),
+               size=9, color="#BFD7FF", ha="center")
+    _draw_text("Método Kumon — Uso interno",
+               0.5, y - _fraccion_h(0.60),
+               size=7.5, color="#7BA7D4", ha="center")
+    y -= _fraccion_h(0.85)
+
+    # ── 2. Badge global ───────────────────────────────────────────
+    color_global = _ETIQ_MPL_BG.get(etiqueta, "#3B82F6")
+    ax.add_patch(plt.Rectangle(
+        (0.03, y - _fraccion_h(0.55)), 0.94, _fraccion_h(0.55),
+        transform=ax.transAxes, color=color_global,
+        alpha=0.15, clip_on=False, zorder=1,
+    ))
+    _draw_text(f"Nivel general de actitud:  {etiq_lbl}  —  {pct_total:.1f}%",
+               0.5, y - _fraccion_h(0.1),
+               size=11, bold=True, color=color_global, ha="center")
+    y -= _fraccion_h(0.38)
+    _draw_bar(y, pct_total, color_global, height_frac=_fraccion_h(0.22))
+    y -= _fraccion_h(0.42)
+    _draw_hline(y)
+    y -= _fraccion_h(0.18)
+
+    # ── 3. Bloque por dimensión ───────────────────────────────────
+    for sec in secciones:
+        nombre = (sec.get("nombre") or sec.get("name") or "Área").strip()
+        etiq_s = sec.get("etiqueta") or ""
+        pct_s  = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
+        lbl_s  = _ETIQ_LABEL.get(etiq_s, etiq_s.capitalize())
+        fg_s   = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
+        desc   = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
+
+        # Nombre + etiqueta
+        _draw_text(nombre, 0.04, y, size=10, bold=True, color="#003087")
+        _draw_text(f"{lbl_s}  {pct_s:.0f}%",
+                   0.96, y, size=9, bold=True, color=fg_s, ha="right")
+        y -= _fraccion_h(0.28)
+
+        # Descripción pedagógica
+        if desc:
+            _draw_text(desc, 0.04, y, size=8, color="#475569")
+            y -= _fraccion_h(0.25)
+
+        # Barra
+        _draw_bar(y, pct_s, fg_s, height_frac=_fraccion_h(0.20))
+        y -= _fraccion_h(0.35)
+        _draw_hline(y)
+        y -= _fraccion_h(0.15)
+
+    # ── 4. Pie ────────────────────────────────────────────────────
+    _draw_text(f"Kumon Ipiales  ·  Boletín de Diagnóstico",
+               0.5, _fraccion_h(0.12),
+               size=7.5, color="#94A3B8", ha="center")
+
+    plt.tight_layout(pad=0)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=110, bbox_inches="tight",
+                facecolor="#FFFFFF")
+    plt.close(fig)
+    buf.seek(0)
+    return buf
