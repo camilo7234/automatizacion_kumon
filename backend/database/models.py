@@ -1194,3 +1194,149 @@ class ProcessingError(Base):
             f"stage='{self.stage}' "
             f"type='{self.error_type}'>"
         )
+
+# ══════════════════════════════════════════════════════════════════
+# BLOQUE 4 — Schema LEARNING
+# ══════════════════════════════════════════════════════════════════
+
+class SignalFeedback(Base):
+    """
+    [LEARNING 1/1] Señales de aprendizaje pasivo — FASE 1.
+
+    Dos tipos de fila en la misma tabla:
+      metrica IS NOT NULL  →  SEÑAL TIPO A (corrección por métrica)
+      metrica IS NULL      →  SEÑAL TIPO B (resumen cuantitativo del job)
+
+    Solo se escribe desde learning/feedback_collector.py.
+    Nunca desde endpoints de negocio.
+    """
+
+    __tablename__ = "signal_feedback"
+    __table_args__ = {"schema": "learning"}
+
+    id      = Column(BigInteger, primary_key=True, autoincrement=True)
+    id_job  = Column(
+        UUID(as_uuid=True),
+        ForeignKey("processing.processing_jobs.id_job", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subject   = Column(String(20), nullable=False)
+    test_code = Column(String(10), nullable=False)
+
+    # ── SEÑAL TIPO A ──────────────────────────────────────────────
+    metrica        = Column(Text)
+    valor_auto     = Column(Numeric(5, 2))
+    confianza_auto = Column(Numeric(4, 3))
+    valor_final    = Column(Numeric(5, 2))
+    fue_corregido  = Column(Boolean, nullable=False, server_default=text("false"))
+
+    # ── SEÑAL TIPO B ──────────────────────────────────────────────
+    activity_ratio  = Column(Numeric(4, 3))
+    num_rewrites    = Column(Integer)
+    total_pausas_ms = Column(Integer)
+    speech_rate     = Column(Numeric(5, 2))
+    pct_aciertos    = Column(Numeric(5, 2))
+    tiempo_ratio    = Column(Numeric(5, 3))
+    confidence_ocr  = Column(Numeric(4, 3))
+
+    # ── Resultado pedagógico final ────────────────────────────────
+    etiqueta_final    = Column(String(30))
+    semaforo          = Column(String(10))
+    puntaje_combinado = Column(Numeric(5, 2))
+
+    created_at = Column(TIMESTAMPTZ, nullable=False, server_default=text("NOW()"))
+
+    job = relationship("ProcessingJob", lazy="select")
+
+    @property
+    def es_resumen(self) -> bool:
+        return self.metrica is None
+
+    def __repr__(self) -> str:
+        tipo = "resumen" if self.es_resumen else f"metrica='{self.metrica}'"
+        return f"<SignalFeedback id={self.id} job={self.id_job} {tipo}>"
+# ──────────────────────────────────────────────────────────────────
+# BLOQUE 4.1 — SignalFeedback
+# Recolector pasivo de señales para calibración futura (FASE 1).
+# Dos tipos de fila en la misma tabla:
+#   Tipo A (metrica IS NOT NULL) → corrección del orientador
+#   Tipo B (metrica IS NULL)     → señales cuantitativas del video
+# ──────────────────────────────────────────────────────────────────
+
+
+class SignalFeedback(Base):
+    """
+    [LEARNING 1/1] Señales de aprendizaje pasivo.
+
+    Nunca se escribe directamente desde endpoints de negocio.
+    Solo se inserta desde learning/feedback_collector.py
+    después de que submit_cuestionario hace su propio commit.
+
+    Convención de filas:
+      metrica IS NOT NULL → SEÑAL TIPO A (corrección por métrica)
+      metrica IS NULL     → SEÑAL TIPO B (resumen cuantitativo del job)
+    """
+
+    __tablename__ = "signal_feedback"
+    __table_args__ = {"schema": "learning"}
+
+    id      = Column(BigInteger, primary_key=True, autoincrement=True)
+    id_job  = Column(
+        UUID(as_uuid=True),
+        ForeignKey("processing.processing_jobs.id_job", ondelete="CASCADE"),
+        nullable=False,
+    )
+    subject   = Column(String(20), nullable=False)   # matematicas|ingles|espanol
+    test_code = Column(String(10), nullable=False)   # K1, P3, M, etc.
+
+    # ── SEÑAL TIPO A: correcciones del orientador ─────────────────
+    # metrica = NULL en la fila resumen (TIPO B)
+    metrica        = Column(Text)
+    valor_auto     = Column(Numeric(5, 2))   # predicción del sistema
+    confianza_auto = Column(Numeric(4, 3))   # confianza del sistema (0-1)
+    valor_final    = Column(Numeric(5, 2))   # valor que quedó guardado
+    fue_corregido  = Column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    # ── SEÑAL TIPO B: señales del video (fila resumen) ────────────
+    activity_ratio  = Column(Numeric(4, 3))   # ratio activo/total
+    num_rewrites    = Column(Integer)          # total borrado/reescritura
+    total_pausas_ms = Column(Integer)          # suma de duracion_ms pausas
+    speech_rate     = Column(Numeric(5, 2))   # palabras/segundo estimadas
+    pct_aciertos    = Column(Numeric(5, 2))   # percentage de TestResult
+    tiempo_ratio    = Column(Numeric(5, 3))   # study_time / target_time
+    confidence_ocr  = Column(Numeric(4, 3))   # confidence_score OCR
+
+    # ── Resultado pedagógico final ────────────────────────────────
+    etiqueta_final    = Column(String(30))   # fortaleza|en_desarrollo|...
+    semaforo          = Column(String(10))   # verde|amarillo|rojo
+    puntaje_combinado = Column(Numeric(5, 2))
+
+    created_at = Column(
+        TIMESTAMPTZ, nullable=False, server_default=text("NOW()")
+    )
+
+    # ── Relaciones ────────────────────────────────────────────────
+    job = relationship(
+        "ProcessingJob",
+        lazy="select",
+    )
+
+    # ── Properties ───────────────────────────────────────────────
+    @property
+    def es_resumen(self) -> bool:
+        """True si esta fila es el resumen cuantitativo del job (TIPO B)."""
+        return self.metrica is None
+
+    @property
+    def es_correccion(self) -> bool:
+        """True si el orientador corrigió lo que el sistema predijo."""
+        return self.fue_corregido is True
+
+    def __repr__(self) -> str:
+        tipo = "resumen" if self.es_resumen else f"metrica='{self.metrica}'"
+        return (
+            f"<SignalFeedback id={self.id} "
+            f"job={self.id_job} {tipo}>"
+        )

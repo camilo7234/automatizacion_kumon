@@ -472,6 +472,24 @@ def submit_cuestionario(
     db.commit()
     db.refresh(obs)
 
+    # ── Aprendizaje pasivo ── FASE 1 ──────────────────────────────
+    # Este bloque NUNCA puede detener el flujo principal.
+    # Si learning/ no existe, si la tabla no existe, o si falla
+    # cualquier cosa: el except silencia todo y el return ocurre igual.
+    try:
+        from learning.feedback_collector import collect_feedback
+        collect_feedback(
+            db=db,
+            id_job=result.id_job,
+            obs=obs,
+            qual=qual,
+            result=result,
+        )
+        db.commit()   # commit separado solo para signal_feedback
+    except Exception:
+        pass
+    # ─────────────────────────────────────────────────────────────
+
     return CuestionarioSubmitResponse(
         observacion_id=obs.id_observacion,
         result_id=result.id_result,
