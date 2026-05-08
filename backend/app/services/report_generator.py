@@ -79,21 +79,25 @@ class QualitativeInput:
     """
     Resumen cualitativo consolidado (ya calculado en config/cuestionarios.py).
 
-
-    total_porcentaje:   0-100 (promedio ponderado de secciones)
-    etiqueta_total:     fortaleza | en_desarrollo | refuerzo | atencion
-    secciones:          lista de secciones con puntaje y etiqueta
-    auto_flags:         métricas capturadas automáticamente (video/audio)
-    prefills:           prefills originales (para depuración)
-    gaze_data:          dict o None (cuando se active cámara frontal)
+    total_porcentaje:        0-100 (promedio ponderado de secciones)
+    etiqueta_total:          fortaleza | en_desarrollo | refuerzo | atencion
+    secciones:               lista de secciones con puntaje, etiqueta e items
+    auto_flags:              métricas capturadas automáticamente (video/audio)
+    prefills:                prefills originales (para depuración)
+    gaze_data:               dict o None (cuando se active cámara frontal)
+    observacion_libre:       comentario libre escrito por el orientador
+    correcciones_orientador: dict con las métricas que el orientador ajustó
+    completado_por:          nombre del orientador que llenó el formulario
     """
-    total_porcentaje: float
-    etiqueta_total:   str
-    secciones:        list
-    auto_flags:       list
-    prefills:         dict
-    gaze_data:        Optional[dict] = None
-
+    total_porcentaje:        float
+    etiqueta_total:          str
+    secciones:               list
+    auto_flags:              list
+    prefills:                dict
+    gaze_data:               Optional[dict] = None
+    observacion_libre:       Optional[str]  = None
+    correcciones_orientador: Optional[dict] = None
+    completado_por:          Optional[str]  = None
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -250,23 +254,25 @@ def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
 # Bloque cualitativo
 # ══════════════════════════════════════════════════════════════════
 
-
 def _build_cualitativo_block(q: QualitativeInput) -> Dict[str, Any]:
     """
     Construye el resumen cualitativo puro.
 
-
     total_porcentaje: 0-100 → se mantiene tal cual
     etiqueta_total:   fortaleza | en_desarrollo | refuerzo | atencion
+    observacion_libre y correcciones_orientador se incluyen solo si
+    tienen contenido, para no contaminar el dict con valores vacíos.
     """
     return {
-        "total_porcentaje": round(float(q.total_porcentaje), 1),
-        "etiqueta_total":   q.etiqueta_total,
-        "secciones":        q.secciones,
-        "auto_flags":       q.auto_flags,
-        "prefills":         q.prefills,
+        "total_porcentaje":        round(float(q.total_porcentaje), 1),
+        "etiqueta_total":          q.etiqueta_total,
+        "secciones":               q.secciones,
+        "auto_flags":              q.auto_flags,
+        "prefills":                q.prefills,
+        "observacion_libre":       q.observacion_libre or None,
+        "correcciones_orientador": q.correcciones_orientador or {},
+        "completado_por":          q.completado_por or None,
     }
-
 
 
 # ══════════════════════════════════════════════════════════════════

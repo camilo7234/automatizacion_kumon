@@ -580,6 +580,7 @@ def _grafica_arco_combinado(
 # [6] FUNCIÓN PRINCIPAL generate_pdf()
 # ══════════════════════════════════════════════════════════════════
 
+
 def generate_pdf(
     report_data:       Dict[str, Any],
     job_created_at:    Optional[datetime],          # CORREGIDO: Optional — puede llegar None
@@ -694,6 +695,21 @@ def generate_pdf(
         story.append(HRFlowable(width="100%", thickness=0.4, color=_BORDE))
         story.append(Spacer(1, 0.3 * cm))
 
+    # ── [12b] Observación libre del orientador ────────────────────
+    obs_libre      = cual.get("observacion_libre")
+    completado_por = cual.get("completado_por")
+    correcciones   = cual.get("correcciones_orientador") or {}
+    if obs_libre or correcciones:
+        story += _seccion_observacion_orientador(
+            styles,
+            observacion_libre=obs_libre,
+            completado_por=completado_por,
+            correcciones=correcciones,
+        )
+        story.append(Spacer(1, 0.35 * cm))
+        story.append(HRFlowable(width="100%", thickness=0.4, color=_BORDE))
+        story.append(Spacer(1, 0.3 * cm))
+
     # ── [13] Recomendación y punto de partida ─────────────────────
     story += _seccion_recomendacion(styles, cuant, comb)
     story.append(Spacer(1, 0.5 * cm))
@@ -713,7 +729,6 @@ def generate_pdf(
     else:
         logger.info("PDF guardado en disco: %s (%.1f KB)", path, path.stat().st_size / 1024)
         return path
-
 
 # ══════════════════════════════════════════════════════════════════
 # [7] SECCIÓN 1 — ENCABEZADO CON LOGO Y DATOS DEL ESTUDIANTE
@@ -1271,6 +1286,70 @@ def _seccion_gaze(styles: Dict, gaze: Dict[str, Any]) -> list:
 
 
 # ══════════════════════════════════════════════════════════════════
+# [12b] SECCIÓN — OBSERVACIÓN LIBRE DEL ORIENTADOR
+#       Datos usados: cualitativo.observacion_libre,
+#                     cualitativo.completado_por,
+#                     cualitativo.correcciones_orientador
+# ══════════════════════════════════════════════════════════════════
+
+def _seccion_observacion_orientador(
+    styles:            Dict,
+    observacion_libre: Optional[str],
+    completado_por:    Optional[str],
+    correcciones:      Dict[str, Any],
+) -> list:
+    """
+    Muestra la observación libre escrita por el orientador
+    y, si las hay, las correcciones manuales que realizó.
+    """
+    elementos = []
+    elementos.append(Paragraph(
+        "✏️  Observaciones del Orientador", styles["seccion"]
+    ))
+
+    # ── Quién completó el cuestionario ───────────────────────────
+    if completado_por:
+        elementos.append(Paragraph(
+            f"<b>Registrado por:</b>  {completado_por}",
+            styles["narrativa"],
+        ))
+        elementos.append(Spacer(1, 0.1 * cm))
+
+    # ── Observación libre ─────────────────────────────────────────
+    if observacion_libre:
+        elementos.append(Paragraph(
+            "<b>Observación:</b>", styles["campo_label"]
+        ))
+        elementos.append(Spacer(1, 0.1 * cm))
+        elementos.append(Paragraph(observacion_libre, styles["narrativa_azul"]))
+        elementos.append(Spacer(1, 0.15 * cm))
+
+    # ── Correcciones manuales (si las hay) ────────────────────────
+    if correcciones:
+        elementos.append(Paragraph(
+            "<b>Ajustes realizados por el orientador:</b>",
+            styles["campo_label"],
+        ))
+        elementos.append(Spacer(1, 0.1 * cm))
+
+        filas = [
+            [Paragraph("<b>Campo</b>",    styles["campo_label"]),
+             Paragraph("<b>Corrección</b>", styles["campo_label"])],
+        ]
+        for campo, valor in correcciones.items():
+            filas.append([
+                campo.replace("_", " ").capitalize(),
+                str(valor) if valor is not None else "—",
+            ])
+
+        tbl = Table(filas, colWidths=[6 * cm, 11 * cm])
+        tbl.setStyle(_tabla_base_style(len(filas), header_color=_KUMON_AZUL_2))
+        elementos.append(tbl)
+
+    return elementos
+
+
+# ══════════════════════════════════════════════════════════════════
 # [13] SECCIÓN 7 — RECOMENDACIÓN Y PUNTO DE PARTIDA
 #      Datos usados: cuantitativo.recommendation, starting_point,
 #                    semaforo (para color de fondo),
@@ -1435,8 +1514,8 @@ def _generar_imagen_cualitativa(
 
     def _draw_hline(yy, alpha=0.25):
         ax.axhline(y=yy, xmin=0.03, xmax=0.97,
-                   transform=ax.transAxes, color="#CBD5E1",
-                   linewidth=0.8, alpha=alpha, clip_on=False)
+                   color="#CBD5E1", linewidth=0.8,
+                   alpha=alpha, clip_on=False)
 
     # ── 1. Encabezado ─────────────────────────────────────────────
     ax.add_patch(plt.Rectangle(

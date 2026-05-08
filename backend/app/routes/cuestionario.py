@@ -667,6 +667,10 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         auto_flags=qual.auto_captured_flags if qual and qual.auto_captured_flags else [],
         prefills=qual.prefills if qual and qual.prefills else {},
         gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
+        # ── NUEVOS: campos del orientador ────────────────────────
+        observacion_libre       = obs.observacion_libre or None,
+        correcciones_orientador = obs.correcciones_orientador or {},
+        completado_por          = obs.completado_por or None,
     )
 
     datos = build_report_data(qnt, cual_input)
@@ -702,7 +706,6 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         gaze=datos.get("gaze"),
         message="Boletín generado correctamente.",
     )
-
 
 # ──────────────────────────────────────────────────────────────
 # PATCH /boletin/{result_id}
@@ -1757,6 +1760,10 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             auto_flags=qual.auto_captured_flags if qual and qual.auto_captured_flags else [],
             prefills=qual.prefills if qual and qual.prefills else {},
             gaze_data=qual.gaze_data if qual and qual.gaze_data else None,
+            # ── NUEVOS: campos del orientador ────────────────────────
+            observacion_libre       = obs.observacion_libre or None,
+            correcciones_orientador = obs.correcciones_orientador or {},
+            completado_por          = obs.completado_por or None,
         )
 
         datos = build_report_data(qnt, cual_input)
@@ -1818,7 +1825,6 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"No fue posible generar el PDF: {exc!s}",
         )
-
 # ──────────────────────────────────────────────────────────────
 # GET /boletin/{result_id}/imagen-cualitativa
 # ──────────────────────────────────────────────────────────────
