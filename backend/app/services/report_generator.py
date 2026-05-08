@@ -202,6 +202,12 @@ def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
     BUG-1 FIX: test_date se persiste formateado como texto legible
     en lugar de ISO 8601, para que todos los consumers (PDF, UI)
     lo muestren directamente sin parsear.
+    BUG-03 FIX: subject se normaliza en el origen con capitalize()
+    para que todos los consumers reciban el dato ya legible sin
+    tener que transformarlo cada uno por su cuenta.
+    BUG-07 FIX: confidence_score, needs_manual_review y tipo_sujeto
+    movidos a sub-bloque "_meta" — son metadatos internos del pipeline,
+    no datos pedagógicos. Se leen via cuant.get("_meta", {}).
     """
     pct         = _to_float(c.percentage)
     study_time  = _to_float(c.study_time_min)
@@ -211,45 +217,43 @@ def _build_cuantitativo_block(c: QuantitativeInput) -> Dict[str, Any]:
     if study_time is not None and target_time is not None and target_time > 0:
         time_ratio = study_time / target_time
 
-    # score_index usa la escala semáforo (verde=100, amarillo=85, rojo=70)
-    # para que el combinado 65/35 sea consistente con el pipeline.
     score_index = _semaforo_to_score(c.semaforo)
 
-    # BUG-1 FIX: formatear la fecha aquí, una sola vez, antes de persistir.
-    # Todos los consumers leen este campo ya legible — ninguno necesita parsear.
     if c.test_date is not None:
         try:
             fecha_formateada = c.test_date.strftime("%d de %B de %Y")
         except AttributeError:
-            # Defensivo: si por alguna razón llega un string en lugar de datetime
             fecha_formateada = str(c.test_date)
     else:
         fecha_formateada = None
 
+    subject_display = (c.subject or "").strip().capitalize()
+
     return {
-        "subject":        c.subject,
-        "test_code":      c.test_code,
-        "display_name":   c.display_name,
-        "ws":             c.ws,
-        "test_date":      fecha_formateada,
-        "study_time_min": study_time,
+        "subject":         subject_display,
+        "test_code":       c.test_code,
+        "display_name":    c.display_name,
+        "ws":              c.ws,
+        "test_date":       fecha_formateada,
+        "study_time_min":  study_time,
         "target_time_min": target_time,
-        "time_ratio":     round(time_ratio, 3) if time_ratio is not None else None,
+        "time_ratio":      round(time_ratio, 3) if time_ratio is not None else None,
         "correct_answers": c.correct_answers,
         "total_questions": c.total_questions,
-        "percentage":     pct,
-        "current_level":  c.current_level,
-        "starting_point": c.starting_point,
-        "semaforo":       c.semaforo,
-        "recommendation": c.recommendation,
-        "score_index":    score_index,
-        "confidence_score":      c.confidence_score,
-        "needs_manual_review":   c.needs_manual_review,
-        "tipo_sujeto":           c.tipo_sujeto,
-        "nombre_sujeto":         c.nombre_sujeto,
+        "percentage":      pct,
+        "current_level":   c.current_level,
+        "starting_point":  c.starting_point,
+        "semaforo":        c.semaforo,
+        "recommendation":  c.recommendation,
+        "score_index":     score_index,
+        "nombre_sujeto":   c.nombre_sujeto,
+        # BUG-07 FIX: metadatos internos del pipeline aislados en "_meta"
+        "_meta": {
+            "confidence_score":    c.confidence_score,
+            "needs_manual_review": c.needs_manual_review,
+            "tipo_sujeto":         c.tipo_sujeto,
+        },
     }
-
-
 # ══════════════════════════════════════════════════════════════════
 # Bloque cualitativo
 # ══════════════════════════════════════════════════════════════════
@@ -262,17 +266,24 @@ def _build_cualitativo_block(q: QualitativeInput) -> Dict[str, Any]:
     etiqueta_total:   fortaleza | en_desarrollo | refuerzo | atencion
     observacion_libre y correcciones_orientador se incluyen solo si
     tienen contenido, para no contaminar el dict con valores vacíos.
+    BUG-10 FIX: prefills solo se incluye si tiene contenido real,
+    evita persistir prefills: {} vacío innecesariamente en BD.
     """
-    return {
+    block: Dict[str, Any] = {
         "total_porcentaje":        round(float(q.total_porcentaje), 1),
         "etiqueta_total":          q.etiqueta_total,
         "secciones":               q.secciones,
         "auto_flags":              q.auto_flags,
-        "prefills":                q.prefills,
         "observacion_libre":       q.observacion_libre or None,
         "correcciones_orientador": q.correcciones_orientador or {},
         "completado_por":          q.completado_por or None,
     }
+
+    # BUG-10 FIX: solo incluir prefills si tiene datos reales
+    if q.prefills:
+        block["prefills"] = q.prefills
+
+    return block
 
 
 # ══════════════════════════════════════════════════════════════════

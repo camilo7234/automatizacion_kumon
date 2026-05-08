@@ -47,6 +47,8 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import cm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
     HRFlowable,
     Image,
@@ -69,6 +71,17 @@ _NOMBRE_CENTRO = "Kumon Ipiales"
 
 # ── Ancho útil del PDF (A4 con márgenes 2cm c/lado) ──────────────
 _PAGE_W = A4[0] - 4 * cm   # ≈ 17 cm
+
+# ── Fuente con soporte emoji (BUG-09 FIX) ────────────────────────
+# Si el archivo no existe el PDF se genera igual sin emojis, nunca falla.
+try:
+    pdfmetrics.registerFont(
+        TTFont("NotoEmoji", str(_ASSETS_DIR / "fonts" / "NotoEmoji-Regular.ttf"))
+    )
+    _EMOJI_FONT_OK = True
+except Exception:
+    _EMOJI_FONT_OK = False
+
 # ══════════════════════════════════════════════════════════════════
 # [1] PALETA DE COLORES Y ESTILOS TIPOGRÁFICOS
 #     Filosofía: azul corporativo Kumon como color primario,
@@ -77,16 +90,16 @@ _PAGE_W = A4[0] - 4 * cm   # ≈ 17 cm
 # ══════════════════════════════════════════════════════════════════
 
 # ── Marca Kumon ───────────────────────────────────────────────────
-_KUMON_ROJO   = colors.HexColor("#E3001B")   # rojo corporativo (solo marca)
-_KUMON_AZUL   = colors.HexColor("#003087")   # azul oscuro primario
-_KUMON_AZUL_M = colors.HexColor("#0050A0")   # azul medio (cabeceras)
-_KUMON_AZUL_L = colors.HexColor("#E8F0FB")   # azul muy claro (fondos)
-_KUMON_AZUL_2 = colors.HexColor("#1A6BB5")   # azul botones / badges
+_KUMON_ROJO   = colors.HexColor("#E3001B")
+_KUMON_AZUL   = colors.HexColor("#003087")
+_KUMON_AZUL_M = colors.HexColor("#0050A0")
+_KUMON_AZUL_L = colors.HexColor("#E8F0FB")
+_KUMON_AZUL_2 = colors.HexColor("#1A6BB5")
 
 # ── Neutros ───────────────────────────────────────────────────────
-_GRIS_TXT   = colors.HexColor("#4B5563")   # texto secundario
-_GRIS_CLARO = colors.HexColor("#F1F5F9")   # fondo alterno filas
-_BORDE      = colors.HexColor("#CBD5E1")   # bordes tabla
+_GRIS_TXT   = colors.HexColor("#4B5563")
+_GRIS_CLARO = colors.HexColor("#F1F5F9")
+_BORDE      = colors.HexColor("#CBD5E1")
 _BLANCO     = colors.white
 _NEGRO      = colors.black
 
@@ -101,18 +114,16 @@ _SEM_TEXTO: Dict[str, str] = {
     "amarillo": "El estudiante debe consolidar los contenidos antes de avanzar.",
     "rojo":     "El estudiante requiere refuerzo adicional en este nivel.",
 }
+
 # Etiquetas legibles para métricas automáticas (prefills)
 _PREFILL_LABELS: Dict[str, str] = {
-    # Video
     "ritmo_trabajo":        "Ritmo de trabajo",
     "num_reescrituras":     "Reescrituras realizadas",
     "pausas_largas":        "Pausas largas detectadas",
     "actividad_general":    "Actividad general",
-    # Audio
     "fluidez_lectura":      "Fluidez de lectura",
     "velocidad_lectura":    "Velocidad de lectura",
     "bloqueos_lectura":     "Bloqueos en lectura",
-    # Camara
     "concentracion_visual": "Concentracion visual",
     "postura_distancia":    "Postura y distancia",
 }
@@ -126,16 +137,17 @@ _PREFILL_VALOR_LABELS: Dict[str, Dict[str, str]] = {
         "irregular": "Irregular",
     },
     "fluidez_lectura": {
-        "fluida":     "Fluida",
-        "moderada":   "Moderada",
-        "disfluida":  "Con dificultades",
+        "fluida":    "Fluida",
+        "moderada":  "Moderada",
+        "disfluida": "Con dificultades",
     },
     "velocidad_lectura": {
-        "rapida":  "Rapida",
-        "normal":  "Normal",
-        "lenta":   "Lenta",
+        "rapida": "Rapida",
+        "normal": "Normal",
+        "lenta":  "Lenta",
     },
 }
+
 # ── Etiquetas cualitativas ────────────────────────────────────────
 _ETIQ_BG: Dict[str, Any] = {
     "fortaleza":     colors.HexColor("#DCFCE7"),
@@ -155,7 +167,8 @@ _ETIQ_LABEL: Dict[str, str] = {
     "refuerzo":      "Necesita refuerzo",
     "atencion":      "Requiere atencion especial",
 }
-# Colores hex puros para matplotlib (sin colors.HexColor — incompatible)
+
+# Colores hex puros para matplotlib
 _ETIQ_MPL_BG: Dict[str, str] = {
     "fortaleza":     "#16A34A",
     "en_desarrollo": "#2563EB",
@@ -163,9 +176,7 @@ _ETIQ_MPL_BG: Dict[str, str] = {
     "atencion":      "#DC2626",
 }
 
-
 # ── Fuente de cada prefill automático ────────────────────────────
-# Nota: emojis eliminados — no están garantizados en Helvetica/Linux.
 _FUENTE_ICONO: Dict[str, str] = {
     "video":  "Registro en video",
     "audio":  "Registro en audio",
@@ -176,9 +187,8 @@ _FUENTE_ICONO: Dict[str, str] = {
 def _build_styles() -> Dict[str, ParagraphStyle]:
     """
     Define todos los estilos tipográficos del PDF en un único lugar.
-    Modificar tipografía / tamaños: solo editar este bloque.
     """
-    return {
+    styles = {
         # ── Encabezado ────────────────────────────────────────────
         "titulo": ParagraphStyle(
             "titulo", fontSize=16, fontName="Helvetica-Bold",
@@ -244,7 +254,14 @@ def _build_styles() -> Dict[str, ParagraphStyle]:
             "pie_negrita", fontSize=7, fontName="Helvetica-Bold",
             textColor=_KUMON_AZUL, alignment=TA_CENTER,
         ),
+        # ── BUG-09 FIX: títulos con soporte emoji ─────────────────
+        "seccion_emoji": ParagraphStyle(
+            "seccion_emoji", fontSize=11,
+            fontName="NotoEmoji" if _EMOJI_FONT_OK else "Helvetica-Bold",
+            textColor=_KUMON_AZUL, spaceBefore=6, spaceAfter=4,
+        ),
     }
+    return styles
 
 # ══════════════════════════════════════════════════════════════════
 # [2] HELPERS DE PARSEO
@@ -786,9 +803,9 @@ def _seccion_encabezado(
       subject, display_name, ws, test_code, current_level,
       starting_point, nombre_sujeto (fallback si prospecto_nombre vacío)
 
-    BUG-1 FIX: eliminada fila 'Fecha del test (BD)' — la única fecha
-    visible es 'Fecha de evaluación' formateada desde job_created_at,
-    que ya viene formateada también en datos_boletin.cuantitativo.test_date.
+    BUG-01 FIX: eliminada fila 'Fecha del test (BD)'.
+    BUG-02 FIX: eliminada concatenación manual de WS — _parsear_display_name
+                ya incluye el WS en nivel_str cuando está disponible.
     """
     _LOGO_ANCHO = 3.5 * cm
     _LOGO_ALTO  = 2.0 * cm
@@ -829,24 +846,23 @@ def _seccion_encabezado(
     elementos.append(Spacer(1, 0.3 * cm))
 
     # ── Tabla de datos del estudiante ────────────────────────────
-    # BUG-1 FIX: solo una fecha, tomada de job_created_at (fecha oficial
-    # del procesamiento del video). La variable fecha_test eliminada.
+    # BUG-02 FIX: ws eliminado como variable separada.
+    # nivel_str ya contiene el WS embebido via _parsear_display_name().
     fecha_str  = job_created_at.strftime("%d de %B de %Y") if job_created_at else "—"
     materia    = (cuant.get("subject") or "").capitalize() or "—"
     nivel_str  = _parsear_display_name(cuant)
     cod_test   = cuant.get("test_code")     or "—"
     nivel_act  = cuant.get("current_level") or "—"
-    ws         = cuant.get("ws")            or "—"
     punto_ini  = _parsear_starting_point(cuant.get("starting_point"))
 
     filas = [
-        ["Estudiante evaluado:",   nombre_final],
-        ["Fecha de evaluación:",   fecha_str],
-        ["Materia:",               materia],
-        ["Nivel evaluado (WS):",   f"{nivel_str}  ·  WS: {ws}"],
-        ["Código de test:",        cod_test],
-        ["Nivel actual:",          nivel_act],
-        ["Punto de inicio:",       punto_ini],
+        ["Estudiante evaluado:",  nombre_final],
+        ["Fecha de evaluación:",  fecha_str],
+        ["Materia:",              materia],
+        ["Nivel evaluado:",       nivel_str],
+        ["Código de test:",       cod_test],
+        ["Nivel actual:",         nivel_act],
+        ["Punto de inicio:",      punto_ini],
     ]
     if orientador_nombre:
         filas.append(["Orientador a cargo:", orientador_nombre])
@@ -871,97 +887,6 @@ def _seccion_encabezado(
     tbl.setStyle(TableStyle(cmds))
     elementos.append(tbl)
     return elementos
-
-def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
-    """
-    Muestra los resultados numéricos del test diagnóstico.
-    Incluye barra de progreso de aciertos, barra de tiempo y semáforo.
-    """
-    elementos = []
-    elementos.append(Paragraph("Resultado Cuantitativo", styles["seccion"]))
-
-    # ── Textos calculados ─────────────────────────────────────────
-    correctas = cuant.get("correct_answers")
-    total     = cuant.get("total_questions")
-    pct       = cuant.get("percentage")
-    pct_val   = float(pct) if pct is not None else (
-        round(correctas / total * 100, 1) if (correctas is not None and total) else None
-    )
-    score_str = (f"{correctas} correctas de {total}  ({pct_val:.1f}%)"
-                 if correctas is not None else "No disponible")
-
-    tiempo_str  = _parsear_tiempo(cuant.get("study_time_min"), cuant.get("target_time_min"))
-    time_ratio  = cuant.get("time_ratio")
-    score_index = cuant.get("score_index")
-
-    # ── Tabla de indicadores ──────────────────────────────────────
-    filas = [
-        [Paragraph("<b>Indicador</b>", styles["campo_label"]),
-         Paragraph("<b>Resultado</b>", styles["campo_label"])],
-        ["Respuestas correctas",          score_str],
-        ["Tiempo de estudio",             tiempo_str],
-        ["Ratio tiempo (real/objetivo)",  f"{time_ratio:.2f}x" if time_ratio else "—"],
-        ["Puntaje cuant. (indice 0-100)", f"{score_index:.0f}" if score_index is not None else "—"],
-        ["Punto de partida", _parsear_starting_point(cuant.get("starting_point"))],
-    ]
-
-    tbl = Table(filas, colWidths=[6.5 * cm, 10.5 * cm])
-    tbl.setStyle(_tabla_base_style(len(filas)))
-    elementos.append(tbl)
-    elementos.append(Spacer(1, 0.25 * cm))
-
-    # ── Barra de progreso de aciertos ─────────────────────────────
-    if pct_val is not None:
-        sem   = (cuant.get("semaforo") or "").strip().lower()
-        col_b = _SEM_COLOR.get(sem, _KUMON_AZUL_2)
-        fila_barra = Table(
-            [[Paragraph(f"<b>Aciertos:</b>  {pct_val:.0f}%", styles["campo_label"]),
-              _barra_progreso_rl(pct_val, width=9 * cm, color_barra=col_b)]],
-            colWidths=[4 * cm, 9.5 * cm],
-        )
-        fila_barra.setStyle(TableStyle([
-            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING",  (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        elementos.append(fila_barra)
-        elementos.append(Spacer(1, 0.18 * cm))
-
-    # ── Barra de tiempo (solo si hay ratio) ───────────────────────
-    if time_ratio is not None:
-        pct_tiempo = min(100, time_ratio * 100)
-        col_t = (colors.HexColor("#DC2626") if time_ratio > 1
-                 else colors.HexColor("#16A34A"))
-        fila_tiempo = Table(
-            [[Paragraph(f"<b>Tiempo:</b>  {time_ratio:.2f}x", styles["campo_label"]),
-              _barra_progreso_rl(pct_tiempo, width=9 * cm, color_barra=col_t)]],
-            colWidths=[4 * cm, 9.5 * cm],
-        )
-        fila_tiempo.setStyle(TableStyle([
-            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING",  (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ]))
-        elementos.append(fila_tiempo)
-        elementos.append(Spacer(1, 0.18 * cm))
-
-    # ── Bloque semaforo ───────────────────────────────────────────
-    semaforo     = (cuant.get("semaforo") or "").strip().lower()
-    semaforo_col = _SEM_COLOR.get(semaforo, _GRIS_TXT)
-    semaforo_txt = _SEM_TEXTO.get(semaforo, "Sin clasificacion automatica")
-    elementos.append(_bloque_color(semaforo_txt, bg=semaforo_col, font_size=11))
-
-    # ── Aviso revision manual ─────────────────────────────────────
-    if cuant.get("needs_manual_review"):
-        razones = cuant.get("review_reasons") or []
-        nota    = "ATENCION: Este resultado requiere revision del orientador."
-        if razones:
-            nota += "  Motivo: " + razones[0]
-        elementos.append(Spacer(1, 0.15 * cm))
-        elementos.append(Paragraph(nota, styles["aviso"]))
-
-    return elementos
-
 # ══════════════════════════════════════════════════════════════════
 # [9] SECCIÓN 3 — PREFILLS AUTOMÁTICOS (VIDEO / AUDIO / CÁMARA)
 #     Datos usados: cualitativo.prefills, cualitativo.auto_flags
@@ -974,19 +899,33 @@ def _seccion_prefills(
     auto_flags: List[str],
 ) -> list:
     """
-    Muestra la tabla de señales capturadas automáticamente por
+    Muestra la tabla de señales validadas automáticamente por
     el sistema (video, audio, camara) con su confianza y valor.
-    Diferencia entre 'auto_captured' (confianza >= umbral)
-    y 'pre-marcado para orientador' (ALWAYS_CONFIRM).
+
+    BUG-04 FIX: se filtra prefills para mostrar SOLO las métricas
+    presentes en auto_flags (confianza >= umbral, validadas).
+    Las métricas ALWAYS_CONFIRM ([?]) no aparecen en el boletín —
+    son datos de trabajo interno del orientador, no del boletín final.
+    Esto unifica el criterio con _generar_imagen_cualitativa().
     """
+    # BUG-04 FIX: mismo filtro que usa _generar_imagen_cualitativa()
+    prefills_validados = {
+        k: v for k, v in prefills.items()
+        if k in auto_flags and isinstance(v, dict)
+    }
+
     elementos = []
+
+    # Si no hay ninguna señal validada, no renderizar la sección
+    if not prefills_validados:
+        return elementos
+
     elementos.append(Paragraph(
-        "Senales Capturadas Automaticamente", styles["seccion"]
+        "Senales Validadas Automaticamente", styles["seccion"]
     ))
     elementos.append(Paragraph(
-        "Datos extraidos por el sistema de analisis. "
-        "Los marcados con [V] fueron validados automaticamente. "
-        "Los marcados con [?] requieren confirmacion del orientador.",
+        "Datos extraidos y validados por el sistema de analisis "
+        "(confianza suficiente para incluirse en el boletin).",
         styles["aviso_info"]
     ))
     elementos.append(Spacer(1, 0.2 * cm))
@@ -994,17 +933,13 @@ def _seccion_prefills(
     filas = [
         [Paragraph("<b>Metrica</b>",  styles["campo_label"]),
          Paragraph("<b>Valor</b>",    styles["campo_label"]),
-         Paragraph("<b>Fuente</b>",   styles["campo_label"]),
-         Paragraph("<b>Estado</b>",   styles["campo_label"])],
+         Paragraph("<b>Fuente</b>",   styles["campo_label"])],
     ]
     estilos_din: List[tuple] = []
 
-    for i, (key, data) in enumerate(prefills.items(), start=1):
-        valor    = data.get("valor", "—")
-        fuente   = _label_fuente(data)
-        es_auto  = key in auto_flags
-        estado   = "[V] Validado" if es_auto else "[?] Confirmar"
-        col_est  = colors.HexColor("#16A34A") if es_auto else colors.HexColor("#D97706")
+    for i, (key, data) in enumerate(prefills_validados.items(), start=1):
+        valor   = data.get("valor", "—")
+        fuente  = _label_fuente(data)
 
         # Etiqueta legible de la metrica
         key_label = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
@@ -1020,15 +955,11 @@ def _seccion_prefills(
         else:
             valor_str = str(valor) if valor is not None else "—"
 
-        filas.append([key_label, valor_str, fuente, estado])
-        estilos_din.append(("TEXTCOLOR", (3, i), (3, i), col_est))
-        estilos_din.append(("FONTNAME",  (3, i), (3, i), "Helvetica-Bold"))
+        filas.append([key_label, valor_str, fuente])
         if i % 2 == 0:
-            estilos_din.append(("BACKGROUND", (0, i), (2, i), _GRIS_CLARO))
+            estilos_din.append(("BACKGROUND", (0, i), (-1, i), _GRIS_CLARO))
 
-    tbl = Table(filas, colWidths=[5.5 * cm, 4 * cm, 4.5 * cm, 3 * cm])
-    # BUG-8 FIX: _tabla_base_style retorna TableStyle — no usar ._cmds
-    # Se construye la lista de comandos directamente sin acceder a atributos privados
+    tbl = Table(filas, colWidths=[5.5 * cm, 4.5 * cm, 7 * cm])
     base_cmds = [
         ("BACKGROUND",    (0, 0), (-1, 0),  _KUMON_AZUL),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  _BLANCO),
@@ -1045,7 +976,7 @@ def _seccion_prefills(
     return elementos
 
 # ══════════════════════════════════════════════════════════════════
-# [10] SECCIÓN 4 — VALORACIÓN CUALITATIVA POR ÁREAS
+# [9] SECCIÓN 4 — VALORACIÓN CUALITATIVA POR ÁREAS
 #      Pedagogía Kumon: 5 dimensiones de actitud y comportamiento
 #      observadas durante la prueba diagnóstica.
 #      Datos: cualitativo.total_porcentaje, etiqueta_total, secciones
@@ -1204,6 +1135,13 @@ def _seccion_grafica_cualitativa(
 #                    datos_incompletos
 # ══════════════════════════════════════════════════════════════════
 
+# BUG-08 FIX: etiquetas legibles para el orientador en tabla KPI
+_KPI_LABELS = {
+    "Cuantitativo": "Resultado del test (0–100)",
+    "Cualitativo":  "Actitud y comportamiento (0–100)",
+}
+
+
 def _seccion_combinada(styles: Dict, comb: Dict[str, Any]) -> list:
     """
     Sección de puntuación global combinada con:
@@ -1211,20 +1149,23 @@ def _seccion_combinada(styles: Dict, comb: Dict[str, Any]) -> list:
     - Tabla KPI cuantitativo vs cualitativo con pesos
     - Arco (velocímetro) de puntaje final
     - Narrativa explicativa generada por el backend
+    BUG-08 FIX: nombres de componentes KPI legibles para el orientador.
+    BUG-09 FIX: título usa styles["seccion_emoji"] para soportar emoji con NotoEmoji.
     """
     elementos = []
-    elementos.append(Paragraph("🏆  Puntuación Global del Diagnóstico", styles["seccion"]))
+    # BUG-09 FIX: seccion_emoji en lugar de seccion
+    elementos.append(Paragraph("🏆  Puntuación Global del Diagnóstico", styles["seccion_emoji"]))
 
-    puntaje  = comb.get("puntaje")
-    etiqueta = comb.get("etiqueta") or ""
-    narrativa = comb.get("narrativa") or ""
-    kpi       = comb.get("kpi") or {}
+    puntaje    = comb.get("puntaje")
+    etiqueta   = comb.get("etiqueta") or ""
+    narrativa  = comb.get("narrativa") or ""
+    kpi        = comb.get("kpi") or {}
     incompleto = comb.get("datos_incompletos", False)
 
     # ── Aviso datos incompletos ───────────────────────────────────
     if incompleto:
         elementos.append(Paragraph(
-            "⚠ El puntaje combinado es parcial porque falta uno de los dos componentes.",
+            "Puntaje combinado parcial: falta uno de los dos componentes.",
             styles["aviso"],
         ))
         elementos.append(Spacer(1, 0.15 * cm))
@@ -1254,13 +1195,14 @@ def _seccion_combinada(styles: Dict, comb: Dict[str, Any]) -> list:
          Paragraph("<b>Peso</b>",         styles["campo_label"]),
          Paragraph("<b>Contribución</b>", styles["campo_label"])],
     ]
+    # BUG-08 FIX: usar _KPI_LABELS para mostrar nombres pedagógicos
     for nombre_kpi, bloque_kpi in [("Cuantitativo", cuant_kpi),
                                     ("Cualitativo",  cual_kpi)]:
-        p = bloque_kpi.get("puntaje")
-        w = bloque_kpi.get("peso")
+        p      = bloque_kpi.get("puntaje")
+        w      = bloque_kpi.get("peso")
         contrib = f"{p * w:.1f}" if (p is not None and w is not None) else "—"
         kpi_rows.append([
-            nombre_kpi,
+            _KPI_LABELS.get(nombre_kpi, nombre_kpi),   # ← BUG-08 FIX
             f"{p:.1f}" if p is not None else "—",
             f"{w*100:.0f}%" if w is not None else "—",
             contrib,
@@ -1288,7 +1230,6 @@ def _seccion_combinada(styles: Dict, comb: Dict[str, Any]) -> list:
         elementos.append(Paragraph(narrativa, styles["narrativa_azul"]))
 
     return elementos
-
 
 # ══════════════════════════════════════════════════════════════════
 # SECCIÓN GAZE — DATOS DE CÁMARA FRONTAL (reservado)
@@ -1512,11 +1453,17 @@ def _generar_imagen_cualitativa(
       5. Observacion del orientador (si existe)
       6. Ajustes registrados por el orientador (si existen)
       7. Pie — Kumon Ipiales
+
+    BUG-05 FIX: fallback de etiqueta usa .replace("_", " ").capitalize()
+                para evitar guiones bajos visibles ("En_desarrollo" → "En desarrollo").
+    BUG-06 FIX: formato de correcciones cambiado de "X -> Y" a
+                "Antes: X  →  Ahora: Y" para legibilidad del orientador.
     """
     secciones         = cual.get("secciones") or []
     etiqueta          = cual.get("etiqueta_total") or ""
     pct_total         = float(cual.get("total_porcentaje") or 0)
-    etiq_lbl          = _ETIQ_LABEL.get(etiqueta, etiqueta.capitalize())
+    # BUG-05 FIX: reemplazar guion bajo antes del capitalize()
+    etiq_lbl          = _ETIQ_LABEL.get(etiqueta, etiqueta.replace("_", " ").capitalize())
     observacion_libre = (cual.get("observacion_libre") or "").strip()
     correcciones      = cual.get("correcciones_orientador") or {}
     completado_por    = (cual.get("completado_por") or "").strip()
@@ -1626,7 +1573,8 @@ def _generar_imagen_cualitativa(
         nombre = (sec.get("nombre") or sec.get("name") or "Area").strip()
         etiq_s = sec.get("etiqueta") or ""
         pct_s  = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
-        lbl_s  = _ETIQ_LABEL.get(etiq_s, etiq_s.capitalize())
+        # BUG-05 FIX: mismo fix en el fallback de cada sección
+        lbl_s  = _ETIQ_LABEL.get(etiq_s, etiq_s.replace("_", " ").capitalize())
         fg_s   = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
         desc   = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
 
@@ -1705,7 +1653,8 @@ def _generar_imagen_cualitativa(
             if isinstance(val, dict):
                 anterior = val.get("anterior", "—")
                 nuevo    = val.get("nuevo", val.get("valor", "—"))
-                val_str  = f"{anterior}  ->  {nuevo}"
+                # BUG-06 FIX: formato legible para el orientador
+                val_str  = f"Antes: {anterior}   →   Ahora: {nuevo}"
             else:
                 val_str = str(val)
             _draw_text(f"  {campo_lbl}:  {val_str}", 0.05, y,
