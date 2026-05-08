@@ -101,7 +101,41 @@ _SEM_TEXTO: Dict[str, str] = {
     "amarillo": "El estudiante debe consolidar los contenidos antes de avanzar.",
     "rojo":     "El estudiante requiere refuerzo adicional en este nivel.",
 }
+# Etiquetas legibles para métricas automáticas (prefills)
+_PREFILL_LABELS: Dict[str, str] = {
+    # Video
+    "ritmo_trabajo":        "Ritmo de trabajo",
+    "num_reescrituras":     "Reescrituras realizadas",
+    "pausas_largas":        "Pausas largas detectadas",
+    "actividad_general":    "Actividad general",
+    # Audio
+    "fluidez_lectura":      "Fluidez de lectura",
+    "velocidad_lectura":    "Velocidad de lectura",
+    "bloqueos_lectura":     "Bloqueos en lectura",
+    # Camara
+    "concentracion_visual": "Concentracion visual",
+    "postura_distancia":    "Postura y distancia",
+}
 
+# Descripcion legible del valor por metrica
+_PREFILL_VALOR_LABELS: Dict[str, Dict[str, str]] = {
+    "ritmo_trabajo": {
+        "rapido":    "Rapido",
+        "normal":    "Normal",
+        "lento":     "Lento",
+        "irregular": "Irregular",
+    },
+    "fluidez_lectura": {
+        "fluida":     "Fluida",
+        "moderada":   "Moderada",
+        "disfluida":  "Con dificultades",
+    },
+    "velocidad_lectura": {
+        "rapida":  "Rapida",
+        "normal":  "Normal",
+        "lenta":   "Lenta",
+    },
+}
 # ── Etiquetas cualitativas ────────────────────────────────────────
 _ETIQ_BG: Dict[str, Any] = {
     "fortaleza":     colors.HexColor("#DCFCE7"),
@@ -838,21 +872,13 @@ def _seccion_encabezado(
     elementos.append(tbl)
     return elementos
 
-# ══════════════════════════════════════════════════════════════════
-# [8] SECCIÓN 2 — RESULTADO CUANTITATIVO
-#     Datos usados: correct_answers, total_questions, percentage,
-#                   study_time_min, target_time_min, time_ratio,
-#                   starting_point, semaforo, score_index,
-#                   needs_manual_review, review_reasons
-# ══════════════════════════════════════════════════════════════════
-
 def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
     """
     Muestra los resultados numéricos del test diagnóstico.
     Incluye barra de progreso de aciertos, barra de tiempo y semáforo.
     """
     elementos = []
-    elementos.append(Paragraph("📊  Resultado Cuantitativo", styles["seccion"]))
+    elementos.append(Paragraph("Resultado Cuantitativo", styles["seccion"]))
 
     # ── Textos calculados ─────────────────────────────────────────
     correctas = cuant.get("correct_answers")
@@ -872,10 +898,10 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
     filas = [
         [Paragraph("<b>Indicador</b>", styles["campo_label"]),
          Paragraph("<b>Resultado</b>", styles["campo_label"])],
-        ["Respuestas correctas",         score_str],
-        ["Tiempo de estudio",            tiempo_str],
-        ["Ratio tiempo (real/objetivo)", f"{time_ratio:.2f}x" if time_ratio else "—"],
-        ["Puntaje cuant. (índice 0-100)", f"{score_index:.0f}" if score_index is not None else "—"],
+        ["Respuestas correctas",          score_str],
+        ["Tiempo de estudio",             tiempo_str],
+        ["Ratio tiempo (real/objetivo)",  f"{time_ratio:.2f}x" if time_ratio else "—"],
+        ["Puntaje cuant. (indice 0-100)", f"{score_index:.0f}" if score_index is not None else "—"],
         ["Punto de partida", _parsear_starting_point(cuant.get("starting_point"))],
     ]
 
@@ -884,9 +910,9 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
     elementos.append(tbl)
     elementos.append(Spacer(1, 0.25 * cm))
 
-    # ── Barra de progreso de aciertos ────────────────────────────
+    # ── Barra de progreso de aciertos ─────────────────────────────
     if pct_val is not None:
-        sem  = (cuant.get("semaforo") or "").strip().lower()
+        sem   = (cuant.get("semaforo") or "").strip().lower()
         col_b = _SEM_COLOR.get(sem, _KUMON_AZUL_2)
         fila_barra = Table(
             [[Paragraph(f"<b>Aciertos:</b>  {pct_val:.0f}%", styles["campo_label"]),
@@ -894,16 +920,15 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
             colWidths=[4 * cm, 9.5 * cm],
         )
         fila_barra.setStyle(TableStyle([
-            ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING",(0, 0), (-1, -1), 0),
+            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ]))
         elementos.append(fila_barra)
         elementos.append(Spacer(1, 0.18 * cm))
 
     # ── Barra de tiempo (solo si hay ratio) ───────────────────────
     if time_ratio is not None:
-        # ratio > 1 → tardó más del objetivo (malo), mostrar en rojo
         pct_tiempo = min(100, time_ratio * 100)
         col_t = (colors.HexColor("#DC2626") if time_ratio > 1
                  else colors.HexColor("#16A34A"))
@@ -913,30 +938,29 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
             colWidths=[4 * cm, 9.5 * cm],
         )
         fila_tiempo.setStyle(TableStyle([
-            ("VALIGN",      (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING",(0, 0), (-1, -1), 0),
+            ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING",  (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ]))
         elementos.append(fila_tiempo)
         elementos.append(Spacer(1, 0.18 * cm))
 
-    # ── Bloque semáforo ───────────────────────────────────────────
+    # ── Bloque semaforo ───────────────────────────────────────────
     semaforo     = (cuant.get("semaforo") or "").strip().lower()
     semaforo_col = _SEM_COLOR.get(semaforo, _GRIS_TXT)
-    semaforo_txt = _SEM_TEXTO.get(semaforo, "Sin clasificación automática")
+    semaforo_txt = _SEM_TEXTO.get(semaforo, "Sin clasificacion automatica")
     elementos.append(_bloque_color(semaforo_txt, bg=semaforo_col, font_size=11))
 
-    # ── Aviso revisión manual ─────────────────────────────────────
+    # ── Aviso revision manual ─────────────────────────────────────
     if cuant.get("needs_manual_review"):
         razones = cuant.get("review_reasons") or []
-        nota    = "⚠ Este resultado requiere revisión del orientador."
+        nota    = "ATENCION: Este resultado requiere revision del orientador."
         if razones:
             nota += "  Motivo: " + razones[0]
         elementos.append(Spacer(1, 0.15 * cm))
         elementos.append(Paragraph(nota, styles["aviso"]))
 
     return elementos
-
 
 # ══════════════════════════════════════════════════════════════════
 # [9] SECCIÓN 3 — PREFILLS AUTOMÁTICOS (VIDEO / AUDIO / CÁMARA)
@@ -951,27 +975,27 @@ def _seccion_prefills(
 ) -> list:
     """
     Muestra la tabla de señales capturadas automáticamente por
-    el sistema (video, audio, cámara) con su confianza y valor.
+    el sistema (video, audio, camara) con su confianza y valor.
     Diferencia entre 'auto_captured' (confianza >= umbral)
     y 'pre-marcado para orientador' (ALWAYS_CONFIRM).
     """
     elementos = []
     elementos.append(Paragraph(
-        "🤖  Señales Capturadas Automáticamente", styles["seccion"]
+        "Senales Capturadas Automaticamente", styles["seccion"]
     ))
     elementos.append(Paragraph(
-        "Datos extraídos por el sistema de análisis de video/audio. "
-        "Los marcados con ✔ fueron validados automáticamente. "
-        "Los marcados con 👁 requieren confirmación del orientador.",
+        "Datos extraidos por el sistema de analisis. "
+        "Los marcados con [V] fueron validados automaticamente. "
+        "Los marcados con [?] requieren confirmacion del orientador.",
         styles["aviso_info"]
     ))
     elementos.append(Spacer(1, 0.2 * cm))
 
     filas = [
-        [Paragraph("<b>Métrica</b>",   styles["campo_label"]),
-         Paragraph("<b>Valor</b>",     styles["campo_label"]),
-         Paragraph("<b>Fuente</b>",    styles["campo_label"]),
-         Paragraph("<b>Estado</b>",    styles["campo_label"])],
+        [Paragraph("<b>Metrica</b>",  styles["campo_label"]),
+         Paragraph("<b>Valor</b>",    styles["campo_label"]),
+         Paragraph("<b>Fuente</b>",   styles["campo_label"]),
+         Paragraph("<b>Estado</b>",   styles["campo_label"])],
     ]
     estilos_din: List[tuple] = []
 
@@ -979,29 +1003,46 @@ def _seccion_prefills(
         valor    = data.get("valor", "—")
         fuente   = _label_fuente(data)
         es_auto  = key in auto_flags
-        estado   = "✔ Validado" if es_auto else "👁 Confirmar"
+        estado   = "[V] Validado" if es_auto else "[?] Confirmar"
         col_est  = colors.HexColor("#16A34A") if es_auto else colors.HexColor("#D97706")
 
+        # Etiqueta legible de la metrica
+        key_label = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
+
         # Valor legible
+        valor_map = _PREFILL_VALOR_LABELS.get(key, {})
         if isinstance(valor, float):
-            valor_str = f"{valor:.3f}"
+            valor_str = valor_map.get(str(valor), f"{valor:.3f}")
         elif isinstance(valor, bool):
-            valor_str = "Sí" if valor else "No"
+            valor_str = "Si" if valor else "No"
+        elif isinstance(valor, str):
+            valor_str = valor_map.get(valor, valor)
         else:
             valor_str = str(valor) if valor is not None else "—"
 
-        filas.append([key.replace("_", " ").capitalize(), valor_str, fuente, estado])
+        filas.append([key_label, valor_str, fuente, estado])
         estilos_din.append(("TEXTCOLOR", (3, i), (3, i), col_est))
         estilos_din.append(("FONTNAME",  (3, i), (3, i), "Helvetica-Bold"))
         if i % 2 == 0:
             estilos_din.append(("BACKGROUND", (0, i), (2, i), _GRIS_CLARO))
 
     tbl = Table(filas, colWidths=[5.5 * cm, 4 * cm, 4.5 * cm, 3 * cm])
-    base_style = _tabla_base_style(len(filas), header_color=_KUMON_AZUL, alternate=False)
-    tbl.setStyle(TableStyle(base_style._cmds + estilos_din))
+    # BUG-8 FIX: _tabla_base_style retorna TableStyle — no usar ._cmds
+    # Se construye la lista de comandos directamente sin acceder a atributos privados
+    base_cmds = [
+        ("BACKGROUND",    (0, 0), (-1, 0),  _KUMON_AZUL),
+        ("TEXTCOLOR",     (0, 0), (-1, 0),  _BLANCO),
+        ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0, 0), (-1, -1), 9),
+        ("GRID",          (0, 0), (-1, -1), 0.4, _BORDE),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+        ("TOPPADDING",    (0, 0), (-1, -1), 5),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 7),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+    ]
+    tbl.setStyle(TableStyle(base_cmds + estilos_din))
     elementos.append(tbl)
     return elementos
-
 
 # ══════════════════════════════════════════════════════════════════
 # [10] SECCIÓN 4 — VALORACIÓN CUALITATIVA POR ÁREAS
@@ -1464,26 +1505,48 @@ def _generar_imagen_cualitativa(
     Dimensiones: ancho fijo 900px, alto dinámico según número de áreas.
 
     Estructura visual:
-      1. Encabezado — nombre del alumno + fecha + materia
+      1. Encabezado — nombre del alumno + fecha + orientador
       2. Badge global — etiqueta + puntaje total + barra
-      3. Un bloque por dimensión — nombre, descripción, barra coloreada
-      4. Pie — Kumon Ipiales (sin mencionar sistema ni video)
+      3. Bloque por dimension — nombre, descripcion, barra coloreada
+      4. Senales validadas automaticamente (solo auto_flags)
+      5. Observacion del orientador (si existe)
+      6. Ajustes registrados por el orientador (si existen)
+      7. Pie — Kumon Ipiales
     """
-    secciones  = cual.get("secciones") or []
-    etiqueta   = cual.get("etiqueta_total") or ""
-    pct_total  = float(cual.get("total_porcentaje") or 0)
-    etiq_lbl   = _ETIQ_LABEL.get(etiqueta, etiqueta.capitalize())
+    secciones         = cual.get("secciones") or []
+    etiqueta          = cual.get("etiqueta_total") or ""
+    pct_total         = float(cual.get("total_porcentaje") or 0)
+    etiq_lbl          = _ETIQ_LABEL.get(etiqueta, etiqueta.capitalize())
+    observacion_libre = (cual.get("observacion_libre") or "").strip()
+    correcciones      = cual.get("correcciones_orientador") or {}
+    completado_por    = (cual.get("completado_por") or "").strip()
+    prefills          = cual.get("prefills") or {}
+    auto_flags        = cual.get("auto_flags") or []
 
-    n          = len(secciones)
-    fig_h      = 3.5 + n * 1.4   # alto dinámico: encabezado + n bloques
-    fig_w      = 10              # pulgadas fijas → 900px a 90dpi
+    # Solo las metricas validadas automaticamente
+    senales_validadas = {
+        k: v for k, v in prefills.items()
+        if k in auto_flags and isinstance(v, dict)
+    }
+
+    n        = len(secciones)
+    n_corr   = len(correcciones)
+    n_sen    = len(senales_validadas)
+
+    fig_h = (
+        3.5
+        + n * 1.4
+        + (0.5 + n_sen * 0.38 if n_sen else 0)
+        + (1.4 if observacion_libre else 0)
+        + (0.5 + n_corr * 0.35 if n_corr else 0)
+    )
+    fig_w = 10
 
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
     ax.axis("off")
     fig.patch.set_facecolor("#FFFFFF")
 
-    # Coordenadas en fracción de figura (ymin=0 abajo, ymax=1 arriba)
-    y = 0.97   # cursor vertical, baja con cada bloque
+    y = 0.97
 
     def _fraccion_h(pulgadas: float) -> float:
         return pulgadas / fig_h
@@ -1498,13 +1561,11 @@ def _generar_imagen_cualitativa(
     def _draw_bar(yy, pct, color_hex, height_frac=0.018):
         bar_x = 0.04
         bar_w = 0.92
-        # fondo
         ax.add_patch(plt.Rectangle(
             (bar_x, yy - height_frac), bar_w, height_frac,
             transform=ax.transAxes, color="#E8F0FB",
             clip_on=False, zorder=2,
         ))
-        # relleno
         fill_w = bar_w * min(pct, 100) / 100
         ax.add_patch(plt.Rectangle(
             (bar_x, yy - height_frac), fill_w, height_frac,
@@ -1517,18 +1578,29 @@ def _generar_imagen_cualitativa(
                    color="#CBD5E1", linewidth=0.8,
                    alpha=alpha, clip_on=False)
 
+    def _draw_section_header(yy, titulo, bg="#F1F5F9", fg="#003087"):
+        ax.add_patch(plt.Rectangle(
+            (0.03, yy - _fraccion_h(0.30)), 0.94, _fraccion_h(0.30),
+            transform=ax.transAxes, color=bg,
+            clip_on=False, zorder=1,
+        ))
+        _draw_text(titulo, 0.05, yy - _fraccion_h(0.04),
+                   size=9, bold=True, color=fg)
+        return yy - _fraccion_h(0.40)
+
     # ── 1. Encabezado ─────────────────────────────────────────────
     ax.add_patch(plt.Rectangle(
         (0, y - _fraccion_h(0.7)), 1, _fraccion_h(0.7),
         transform=ax.transAxes, color="#003087", clip_on=False, zorder=1,
     ))
-    _draw_text("VALORACIÓN CUALITATIVA — ACTITUD Y COMPORTAMIENTO",
+    _draw_text("VALORACION CUALITATIVA — ACTITUD Y COMPORTAMIENTO",
                0.5, y - _fraccion_h(0.08),
                size=12, bold=True, color="#FFFFFF", ha="center")
-    _draw_text(f"{nombre_sujeto}   ·   Fecha: {fecha_str}",
+    _draw_text(f"{nombre_sujeto}   -   Fecha: {fecha_str}",
                0.5, y - _fraccion_h(0.38),
                size=9, color="#BFD7FF", ha="center")
-    _draw_text("Método Kumon — Uso interno",
+    orientador_txt = f"Orientador: {completado_por}" if completado_por else "Metodo Kumon — Uso interno"
+    _draw_text(orientador_txt,
                0.5, y - _fraccion_h(0.60),
                size=7.5, color="#7BA7D4", ha="center")
     y -= _fraccion_h(0.85)
@@ -1549,34 +1621,101 @@ def _generar_imagen_cualitativa(
     _draw_hline(y)
     y -= _fraccion_h(0.18)
 
-    # ── 3. Bloque por dimensión ───────────────────────────────────
+    # ── 3. Bloque por dimension ───────────────────────────────────
     for sec in secciones:
-        nombre = (sec.get("nombre") or sec.get("name") or "Área").strip()
+        nombre = (sec.get("nombre") or sec.get("name") or "Area").strip()
         etiq_s = sec.get("etiqueta") or ""
         pct_s  = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
         lbl_s  = _ETIQ_LABEL.get(etiq_s, etiq_s.capitalize())
         fg_s   = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
         desc   = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
 
-        # Nombre + etiqueta
         _draw_text(nombre, 0.04, y, size=10, bold=True, color="#003087")
         _draw_text(f"{lbl_s}  {pct_s:.0f}%",
                    0.96, y, size=9, bold=True, color=fg_s, ha="right")
         y -= _fraccion_h(0.28)
 
-        # Descripción pedagógica
         if desc:
             _draw_text(desc, 0.04, y, size=8, color="#475569")
             y -= _fraccion_h(0.25)
 
-        # Barra
         _draw_bar(y, pct_s, fg_s, height_frac=_fraccion_h(0.20))
         y -= _fraccion_h(0.35)
         _draw_hline(y)
         y -= _fraccion_h(0.15)
 
-    # ── 4. Pie ────────────────────────────────────────────────────
-    _draw_text(f"Kumon Ipiales  ·  Boletín de Diagnóstico",
+    # ── 4. Senales validadas automaticamente ─────────────────────
+    if senales_validadas:
+        y -= _fraccion_h(0.10)
+        y = _draw_section_header(
+            y,
+            "Observaciones del sistema — senales validadas",
+            bg="#F0FDF4", fg="#166534",
+        )
+        for key, data in senales_validadas.items():
+            metrica_lbl = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
+            valor       = data.get("valor")
+            valor_map   = _PREFILL_VALOR_LABELS.get(key, {})
+
+            if isinstance(valor, bool):
+                valor_str = "Si" if valor else "No"
+            elif isinstance(valor, float):
+                valor_str = valor_map.get(str(valor), f"{valor:.2f}")
+            elif isinstance(valor, str):
+                valor_str = valor_map.get(valor, valor.capitalize())
+            else:
+                valor_str = str(valor) if valor is not None else "—"
+
+            linea = f"{metrica_lbl}:   {valor_str}"
+            _draw_text(linea, 0.05, y, size=8.5, color="#14532D")
+            y -= _fraccion_h(0.30)
+
+        _draw_hline(y)
+        y -= _fraccion_h(0.15)
+
+    # ── 5. Observacion del orientador ─────────────────────────────
+    if observacion_libre:
+        y -= _fraccion_h(0.10)
+        y = _draw_section_header(y, "Observacion del orientador",
+                                 bg="#EFF6FF", fg="#1D4ED8")
+        ax.add_patch(plt.Rectangle(
+            (0.03, y - _fraccion_h(0.90)), 0.94, _fraccion_h(0.90),
+            transform=ax.transAxes, color="#EFF6FF",
+            clip_on=False, zorder=1,
+        ))
+        _draw_text(observacion_libre, 0.05, y - _fraccion_h(0.08),
+                   size=8.5, color="#1E3A5F")
+        y -= _fraccion_h(1.05)
+        _draw_hline(y)
+        y -= _fraccion_h(0.15)
+
+    # ── 6. Ajustes registrados por el orientador ──────────────────
+    if correcciones:
+        y -= _fraccion_h(0.10)
+        y = _draw_section_header(y, "Ajustes registrados por el orientador",
+                                 bg="#FFF7ED", fg="#C2410C")
+        _LABELS_CORR = {
+            "etiqueta_total":   "Nivel general",
+            "total_porcentaje": "Puntaje total",
+            "semaforo":         "Semaforo",
+            "recommendation":   "Recomendacion",
+        }
+        for campo, val in correcciones.items():
+            campo_lbl = _LABELS_CORR.get(campo, str(campo).replace("_", " ").capitalize())
+            if isinstance(val, dict):
+                anterior = val.get("anterior", "—")
+                nuevo    = val.get("nuevo", val.get("valor", "—"))
+                val_str  = f"{anterior}  ->  {nuevo}"
+            else:
+                val_str = str(val)
+            _draw_text(f"  {campo_lbl}:  {val_str}", 0.05, y,
+                       size=8, color="#7C2D12")
+            y -= _fraccion_h(0.30)
+        _draw_hline(y)
+        y -= _fraccion_h(0.15)
+
+    # ── 7. Pie ────────────────────────────────────────────────────
+    _draw_text("Kumon Ipiales  -  Boletin de Diagnostico",
                0.5, _fraccion_h(0.12),
                size=7.5, color="#94A3B8", ha="center")
 

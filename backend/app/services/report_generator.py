@@ -357,10 +357,17 @@ def _build_combinado_block(
     datos_incompletos = False
     if score_cuant is None or score_cual is None:
         datos_incompletos = True
-        if score_cuant is not None:
-            combined_score = round(weight_cuant * score_cuant, 1)
+        if score_cuant is not None and score_cual is not None:
+            # nunca llega aqui pero es defensivo
+            combined_score = round(
+                weight_cuant * score_cuant + weight_cual * score_cual, 1
+            )
+        elif score_cuant is not None:
+            # Solo hay cuantitativo — se normaliza al 100% del peso disponible
+            combined_score = round(score_cuant, 1)
         elif score_cual is not None:
-            combined_score = round(weight_cual * score_cual, 1)
+            # Solo hay cualitativo — se normaliza al 100% del peso disponible
+            combined_score = round(score_cual, 1)
         else:
             combined_score = None
     else:
@@ -368,7 +375,6 @@ def _build_combinado_block(
             weight_cuant * score_cuant + weight_cual * score_cual,
             1,
         )
-
     etiqueta  = _classify_combined_label(combined_score)
     narrative = _build_combined_narrative(
         combined_score,
