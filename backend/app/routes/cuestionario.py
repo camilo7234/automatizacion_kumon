@@ -314,6 +314,7 @@ def _build_final_respuestas(
 
 @router.get("/cuestionario/{result_id}", response_model=CuestionarioResponse)
 def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
+    
     result = (
         db.query(TestResult)
         .filter(TestResult.id_result == result_id)
@@ -431,8 +432,8 @@ def submit_cuestionario(
     final_respuestas = _build_final_respuestas(
         payload_respuestas=payload.respuestas,
         qual=qual,
-        subject=template.subject,        # ya disponible en el endpoint
-        test_code=template.code,         # ya disponible en el endpoint
+        subject=template.subject,
+        test_code=template.code,
     )
     respuestas_para_calculo = _flatten_respuestas(final_respuestas)
 
@@ -456,17 +457,17 @@ def submit_cuestionario(
     if not obs:
         obs = ObservacionCualitativa(id_result=result.id_result)
 
-    obs.subject              = template.subject
-    obs.test_code            = template.code
-    obs.respuestas           = final_respuestas
-    obs.puntaje_cualitativo  = calc["total_porcentaje"]
-    obs.etiqueta_cualitativa = calc["etiqueta_total"]
-    obs.detalle_secciones    = calc["secciones"]
-    obs.completado_por       = payload.completado_por
-    obs.completado_at        = datetime.now(timezone.utc)
-    obs.observacion_libre    = payload.observacion_libre
-    obs.correcciones_orientador = payload.correcciones_orientador or {}
-    obs.esta_completo        = obs._esta_completo_calculado
+    obs.subject                  = template.subject
+    obs.test_code                = template.code
+    obs.respuestas               = final_respuestas
+    obs.puntaje_cualitativo      = calc["total_porcentaje"]
+    obs.etiqueta_cualitativa     = calc["etiqueta_total"]
+    obs.detalle_secciones        = calc["secciones"]
+    obs.completado_por           = payload.completado_por
+    obs.completado_at            = datetime.now(timezone.utc)
+    obs.observacion_libre        = payload.observacion_libre
+    obs.correcciones_orientador  = payload.correcciones_orientador or {}
+    obs.esta_completo            = obs._esta_completo_calculado
 
     db.add(obs)
     db.commit()
@@ -495,6 +496,20 @@ def submit_cuestionario(
             type(exc).__name__,
             exc,
         )
+
+    # ✅ RETURN AGREGADO — resuelve ResponseValidationError (input: None)
+    return CuestionarioSubmitResponse(
+        id_observacion=obs.id_observacion,
+        result_id=obs.id_result,
+        subject=obs.subject,
+        test_code=obs.test_code,
+        puntaje_cualitativo=obs.puntaje_cualitativo,
+        etiqueta_cualitativa=obs.etiqueta_cualitativa,
+        esta_completo=obs.esta_completo,
+        completado_por=obs.completado_por,
+        completado_at=obs.completado_at,
+        detalle_secciones=obs.detalle_secciones,
+    )
 # ──────────────────────────────────────────────────────────────
 # GET /boletin/{result_id}
 # ──────────────────────────────────────────────────────────────
