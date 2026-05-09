@@ -476,7 +476,7 @@ def _grafica_barras_secciones(
     colores  = []
 
     for sec in secciones:
-        nombre = sec.get("nombre") or sec.get("name") or "Área"
+        nombre = sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Área"
         # FIX Bug-5: usar get() con None explícito para no perder el 0 real
         pct_raw = sec.get("porcentaje")
         if pct_raw is None:
@@ -999,7 +999,7 @@ def _seccion_prefills(
         return elementos
 
     elementos.append(Paragraph(
-        "Observaciones del Comportamiento durante la Prueba", styles["seccion"]
+        "Comportamiento durante la Prueba ", styles["seccion"]
     ))
     elementos.append(Paragraph(
         "Aspectos del comportamiento del estudiante observados durante la prueba diagnóstica.",
@@ -1087,7 +1087,7 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     """
     elementos  = []
     elementos.append(Paragraph("📋  Valoración Cualitativa — Actitud y Comportamiento",
-                                styles["seccion_emoji"]))
+                               styles["seccion_emoji"]))
     elementos.append(Paragraph(
         "Valoración de las dimensiones de actitud observadas durante la prueba diagnóstica, "
         "conforme al método Kumon.",
@@ -1143,10 +1143,13 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         return elementos
 
     for sec in secciones:
-        nombre  = (sec.get("nombre") or sec.get("name") or "Área evaluada").strip()
+        nombre  = (sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Área evaluada").strip()
         etiq_s  = sec.get("etiqueta") or ""
-        pct_s   = sec.get("porcentaje") or sec.get("puntaje") or 0.0
-        pct_f   = float(pct_s)
+        # FIX BUG A: preservar porcentajes 0 y no pisarlos con `or`
+        pct_raw = sec.get("porcentaje")
+        if pct_raw is None:
+            pct_raw = sec.get("puntaje")
+        pct_f   = float(pct_raw) if pct_raw is not None else 0.0
         lbl_s   = _ETIQ_LABEL.get(etiq_s, etiq_s.capitalize())
         bg_s    = _ETIQ_BG.get(etiq_s, _KUMON_AZUL_L)
         fg_s    = _ETIQ_FG.get(etiq_s, _KUMON_AZUL)
@@ -1194,7 +1197,6 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         elementos.extend(_bloque_observacion(styles, observacion_libre, completado_por))
 
     return elementos
-
 
 def _bloque_observacion(styles: Dict, observacion_libre: str, completado_por: str = "") -> list:
     """
@@ -1660,7 +1662,6 @@ def _generar_imagen_cualitativa(
     _draw_text(f"{nombre_sujeto}   -   Fecha: {fecha_str}",
                0.5, y - _fraccion_h(0.38),
                size=9, color="#BFD7FF", ha="center")
-    # Sin mencionar orientador ni fuente — solo identificación institucional
     _draw_text("Metodo Kumon — Ipiales",
                0.5, y - _fraccion_h(0.60),
                size=7.5, color="#7BA7D4", ha="center")
@@ -1684,12 +1685,31 @@ def _generar_imagen_cualitativa(
 
     # ── 3. Bloque por dimension ───────────────────────────────────
     for sec in secciones:
-        nombre = (sec.get("nombre") or sec.get("name") or "Area").strip()
+        # FIX Bug-titulo: agregar sec.get("titulo") como fallback
+        nombre = (
+            sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Area"
+        ).strip()
+
         etiq_s = sec.get("etiqueta") or ""
-        pct_s  = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
-        lbl_s  = _ETIQ_LABEL.get(etiq_s, etiq_s.replace("_", " ").capitalize())
-        fg_s   = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
-        desc   = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
+
+        # FIX Bug-falsy: extraer pct con None explícito para no perder 0%
+        pct_raw = sec.get("porcentaje")
+        if pct_raw is None:
+            pct_raw = sec.get("puntaje")
+        pct_s = float(pct_raw) if pct_raw is not None else 0.0
+
+        lbl_s = _ETIQ_LABEL.get(etiq_s, etiq_s.replace("_", " ").capitalize())
+        fg_s  = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
+
+        # FIX Bug-desc: buscar por clave exacta primero, luego por substring
+        # del nombre contra las claves del dict (cubre títulos largos del backend)
+        desc = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
+        if not desc:
+            nombre_lower = nombre.lower()
+            for clave, texto in _KUMON_DIMENSION_DESC.items():
+                if clave in nombre_lower or nombre_lower in clave:
+                    desc = texto
+                    break
 
         _draw_text(nombre, 0.04, y, size=10, bold=True, color="#003087")
         _draw_text(f"{lbl_s}  {pct_s:.0f}%",
@@ -1710,7 +1730,6 @@ def _generar_imagen_cualitativa(
         y -= _fraccion_h(0.10)
         y = _draw_section_header(y, "Observacion del orientador",
                                  bg="#EFF6FF", fg="#1D4ED8")
-        # Alto del cuadro proporcional a la longitud del texto
         bloque_h = max(_fraccion_h(0.90), _fraccion_h(0.30 + len(observacion_libre) / 120))
         ax.add_patch(plt.Rectangle(
             (0.03, y - bloque_h), 0.94, bloque_h,
