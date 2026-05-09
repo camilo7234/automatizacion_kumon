@@ -717,61 +717,56 @@ def _calcular_resultado_cualitativo(
 
 def _calcular_resultado_integrado(
     semaforo_cuantitativo: Optional[str],
-    semaforo_cualitativo:  str,
-    study_time_min:        Optional[float],
-    target_time_min:       Optional[float],
-    percentage:            Optional[float],
-    flag_critico:          bool,
+    semaforo_cualitativo: str,
+    study_time_min: Optional[float],
+    target_time_min: Optional[float],
+    percentage: Optional[float],
+    flag_critico: bool,
 ) -> dict:
     """
     Combina cuantitativo (65 %) + cualitativo (35 %) → resultado final Kumon.
 
-
-    Escala interna:
+    Escala interna sincronizada con report_generator._SEMAFORO_SCORE:
       verde    → 100 pts
-      amarillo →  85 pts
-      rojo     →  70 pts
-
+      amarillo →  65 pts
+      rojo     →  30 pts
 
     Reglas de override (sobrescriben la fórmula):
-      1. Flag crítico presente              → rojo automático (score = 70)
-      2. Tiempo > target_time_min + 1 min  → score techo = 74 → rojo
-         Tolerancia de 1 minuto absoluto:
-         si el estándar es 10 min, se acepta hasta 11 min sin penalizar.
-      3. Porcentaje < 75 %                 → score techo = 74 → rojo
+      1. Flag crítico presente         → rojo automático (score = 30)
+      2. Tiempo > target_time_min + 1  → score techo = 49 → refuerzo/atención
+      3. Porcentaje < 75 %             → score techo = 49 → refuerzo/atención
     """
-    _SCORE: dict[str, float] = {"verde": 100.0, "amarillo": 85.0, "rojo": 70.0}
+    # SYNC FIX: escala idéntica a report_generator._SEMAFORO_SCORE
+    _SCORE: dict[str, float] = {"verde": 100.0, "amarillo": 65.0, "rojo": 30.0}
 
-
-    score_cuant = _SCORE.get(semaforo_cuantitativo or "rojo", 70.0)
-    score_cual  = _SCORE.get(semaforo_cualitativo, 70.0)
+    score_cuant = _SCORE.get(semaforo_cuantitativo or "rojo", 30.0)
+    score_cual  = _SCORE.get(semaforo_cualitativo, 30.0)
     score_final = round(0.65 * score_cuant + 0.35 * score_cual, 1)
-
 
     # time_ratio se conserva solo para auditoría en BD, no controla la decisión.
     time_ratio: Optional[float] = None
     if study_time_min and target_time_min and target_time_min > 0:
         time_ratio = round(study_time_min / target_time_min, 2)
 
-
     override: Optional[str] = None
     if flag_critico:
-        score_final = 70.0
-        override    = "rojo_por_flag_critico"
+        # SYNC FIX: score rojo = 30 (antes 70, que clasificaba como refuerzo)
+        score_final = 30.0
+        override = "rojo_por_flag_critico"
     elif (
         study_time_min is not None
         and target_time_min is not None
         and study_time_min > target_time_min + 1.0
     ):
         # Tolerancia de 1 minuto absoluto.
-        # Ejemplo: target=10 min → penaliza si study_time > 11 min.
-        #          target=25 min → penaliza si study_time > 26 min.
-        score_final = min(score_final, 74.0)
-        override    = "penalizado_por_tiempo"
+        # SYNC FIX: techo 49 → cae en "refuerzo" con la nueva escala del boletín
+        # (antes 74, que con escala vieja era rojo pero con escala nueva era en_desarrollo)
+        score_final = min(score_final, 49.0)
+        override = "penalizado_por_tiempo"
     elif percentage is not None and percentage < 75.0:
-        score_final = min(score_final, 74.0)
-        override    = "penalizado_por_puntaje_bajo"
-
+        # SYNC FIX: mismo techo 49 para consistencia con penalización por tiempo
+        score_final = min(score_final, 49.0)
+        override = "penalizado_por_puntaje_bajo"
 
     if score_final >= 90.0:
         color_final = "verde"
@@ -779,7 +774,6 @@ def _calcular_resultado_integrado(
         color_final = "amarillo"
     else:
         color_final = "rojo"
-
 
     return {
         "color_final":        color_final,

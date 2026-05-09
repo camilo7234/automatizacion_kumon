@@ -1235,6 +1235,7 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
         else:
             bulletin.datos_boletin        = datos
             bulletin.puntaje_cuantitativo = datos.get("cuantitativo", {}).get("score_index")
+            bulletin.puntaje_cualitativo  = total_porcentaje
             bulletin.puntaje_combinado    = datos.get("combinado", {}).get("puntaje")
             bulletin.etiqueta_combinada   = datos.get("combinado", {}).get("etiqueta")
             bulletin.status               = "ready"
@@ -1276,6 +1277,10 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"No fue posible generar el PDF: {exc!s}",
         )
+
+
+
+
 # ──────────────────────────────────────────────────────────────
 # GET /boletin/{result_id}/imagen-cualitativa
 # ──────────────────────────────────────────────────────────────
@@ -1343,7 +1348,8 @@ def get_imagen_cualitativa(result_id: UUID, db: Session = Depends(get_db)):
         fecha_str=fecha_str,
     )
 
-    nombre_safe = nombre_sujeto.replace("/", "-").replace(" ", "_")
+    # Normalizar mínimamente el nombre de archivo para evitar caracteres problemáticos
+    nombre_safe = (nombre_sujeto or "sin-nombre").replace("/", "-").replace("\\", "-").replace(" ", "_")
     filename_img = f"cualitativa_{nombre_safe}.png"
 
     return StreamingResponse(
