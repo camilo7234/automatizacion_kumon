@@ -637,7 +637,6 @@ def _grafica_arco_combinado(
 # [6] FUNCIÓN PRINCIPAL generate_pdf()
 # ══════════════════════════════════════════════════════════════════
 
-
 def generate_pdf(
     report_data:       Dict[str, Any],
     job_created_at:    Optional[datetime],          # CORREGIDO: Optional — puede llegar None
@@ -756,10 +755,18 @@ def generate_pdf(
     obs_libre      = cual.get("observacion_libre")
     completado_por = cual.get("completado_por")
     correcciones   = cual.get("correcciones_orientador") or {}
-    if obs_libre or correcciones:
+
+    # C-5 / C-4 FIX: solo activar la sección cuando haya texto real
+    # en observacion_libre (no cadenas vacías ni solo espacios),
+    # o cuando existan correcciones. Evita bloques vacíos.
+    obs_libre_str = (obs_libre or "").strip()
+    tiene_obs     = bool(obs_libre_str)
+    tiene_corr    = bool(correcciones)
+
+    if tiene_obs or tiene_corr:
         story += _seccion_observacion_orientador(
             styles,
-            observacion_libre=obs_libre,
+            observacion_libre=obs_libre_str if tiene_obs else None,
             completado_por=completado_por,
             correcciones=correcciones,
         )
@@ -895,8 +902,8 @@ def _seccion_encabezado(
 
 # ══════════════════════════════════════════════════════════════════
 # [8] SECCIÓN 2 — RESULTADO CUANTITATIVO
-#     Datos usados: score, semaforo, tiempo_estudio, tiempo_objetivo,
-#                   aciertos, errores, total_ejercicios
+#     Datos usados: score_index, semaforo, tiempo_estudio, tiempo_objetivo,
+#                   aciertos, errores, total_ejercicios, percentage, time_ratio
 # ══════════════════════════════════════════════════════════════════
 
 def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
@@ -908,7 +915,8 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
     elementos = []
     elementos.append(Paragraph("📊  Resultado del Test Diagnóstico", styles["seccion"]))
 
-    score      = cuant.get("score")
+    # C-3 FIX: la clave real en el dict de report_generator es "score_index", no "score"
+    score      = cuant.get("score_index")
     semaforo   = (cuant.get("semaforo") or "").strip().lower()
     sem_color  = _SEM_COLOR.get(semaforo, _KUMON_AZUL_M)
     sem_texto  = _SEM_TEXTO.get(semaforo, "")
@@ -932,8 +940,14 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
     )
 
     aciertos  = cuant.get("correct_answers")
-    errores   = None
     total     = cuant.get("total_questions")
+    errores   = (total - aciertos) if (total is not None and aciertos is not None) else None
+
+    # C-2 FIX: leer percentage del dict cuant — dato ya calculado en report_generator
+    pct = cuant.get("percentage")
+
+    # P-5 FIX: leer time_ratio del dict cuant — dato ya calculado en report_generator
+    time_ratio = cuant.get("time_ratio")
 
     filas = [
         [Paragraph("<b>Métrica</b>",  styles["campo_label"]),
@@ -941,6 +955,16 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
         [Paragraph("Tiempo de trabajo", styles["campo_label"]),
          Paragraph(tiempo_str,          styles["campo_valor"])],
     ]
+    if time_ratio is not None:
+        try:
+            ratio_float = float(time_ratio)
+            ratio_txt   = f"{ratio_float:.2f}× del tiempo objetivo"
+        except (TypeError, ValueError):
+            ratio_txt = str(time_ratio)
+        filas.append([
+            Paragraph("Relación tiempo / TPT", styles["campo_label"]),
+            Paragraph(ratio_txt,               styles["campo_valor"]),
+        ])
     if total is not None:
         filas.append([
             Paragraph("Ejercicios totales", styles["campo_label"]),
@@ -956,6 +980,16 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
             Paragraph("Errores", styles["campo_label"]),
             Paragraph(str(errores), styles["campo_valor"]),
         ])
+    if pct is not None:
+        try:
+            pct_float = float(pct)
+            pct_txt   = f"{pct_float:.1f}%"
+        except (TypeError, ValueError):
+            pct_txt = str(pct)
+        filas.append([
+            Paragraph("Porcentaje de aciertos", styles["campo_label"]),
+            Paragraph(pct_txt,                  styles["campo_valor"]),
+        ])
 
     tbl = Table(filas, colWidths=[5.5 * cm, 11.5 * cm])
     tbl.setStyle(_tabla_base_style(len(filas)))
@@ -969,7 +1003,6 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
 #     Datos usados: cualitativo.prefills, cualitativo.auto_flags
 #     Muestra qué captó el sistema automáticamente con su confianza.
 # ══════════════════════════════════════════════════════════════════
-
 
 def _seccion_prefills(
     styles:     Dict,
@@ -986,8 +1019,6 @@ def _seccion_prefills(
     No se menciona fuente, confianza ni origen de los datos.
     El boletín muestra resultados pedagógicos, no metadatos internos.
     """
-    # FIX: mostrar cualquier prefill que tenga valor real
-    # sin depender de auto_flags ni evaluar confianza
     prefills_validados = {
         k: v for k, v in prefills.items()
         if isinstance(v, dict) and v.get("valor") is not None
@@ -1016,10 +1047,8 @@ def _seccion_prefills(
     for i, (key, data) in enumerate(prefills_validados.items(), start=1):
         valor = data.get("valor", "—")
 
-        # Etiqueta legible del aspecto
         key_label = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
 
-        # Valor legible — sin mostrar confianza ni fuente
         valor_map = _PREFILL_VALOR_LABELS.get(key, {})
         if isinstance(valor, float):
             valor_str = valor_map.get(str(valor), f"{valor:.3f}")
@@ -1052,6 +1081,8 @@ def _seccion_prefills(
     tbl.setStyle(TableStyle(base_cmds + estilos_din))
     elementos.append(tbl)
     return elementos
+
+
 # ══════════════════════════════════════════════════════════════════
 # [9] SECCIÓN 4 — VALORACIÓN CUALITATIVA POR ÁREAS
 #      Pedagogía Kumon: 5 dimensiones de actitud y comportamiento
@@ -1060,19 +1091,35 @@ def _seccion_prefills(
 #             cualitativo.observacion_libre, cualitativo.completado_por
 # ══════════════════════════════════════════════════════════════════
 
-
-# Descripción pedagógica de cada dimensión Kumon.
-# Clave: nombre normalizado (lower + strip). Fallback: texto genérico.
+# P-4 FIX: _KUMON_DIMENSION_DESC ampliado con todas las dimensiones
+# que pueden llegar desde los cuestionarios del backend.
+# Sin este dict completo, las secciones aparecen sin descripción pedagógica.
 _KUMON_DIMENSION_DESC: Dict[str, str] = {
-    "concentración":      "Capacidad de mantener el foco en la tarea sin interrupciones durante toda la prueba.",
-    "concentracion":      "Capacidad de mantener el foco en la tarea sin interrupciones durante toda la prueba.",
-    "autonomía":          "Capacidad de abordar y resolver los ejercicios de forma independiente.",
-    "autonomia":          "Capacidad de abordar y resolver los ejercicios de forma independiente.",
-    "ritmo de trabajo":   "Constancia y velocidad sostenida a lo largo de la prueba sin picos ni paradas.",
-    "confianza":          "Seguridad al ejecutar las respuestas, sin dudas excesivas ni correcciones innecesarias.",
-    "actitud":            "Disposición activa y motivación visible durante el desarrollo de la prueba.",
-    "motivación":         "Disposición activa y motivación visible durante el desarrollo de la prueba.",
-    "motivacion":         "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+    "concentración":       "Capacidad de mantener el foco en la tarea sin interrupciones durante toda la prueba.",
+    "concentracion":       "Capacidad de mantener el foco en la tarea sin interrupciones durante toda la prueba.",
+    "autonomía":           "Capacidad de abordar y resolver los ejercicios de forma independiente.",
+    "autonomia":           "Capacidad de abordar y resolver los ejercicios de forma independiente.",
+    "ritmo de trabajo":    "Constancia y velocidad sostenida a lo largo de la prueba sin picos ni paradas.",
+    "confianza":           "Seguridad al ejecutar las respuestas, sin dudas excesivas ni correcciones innecesarias.",
+    "actitud":             "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+    "motivación":          "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+    "motivacion":          "Disposición activa y motivación visible durante el desarrollo de la prueba.",
+    # P-4 FIX: dimensiones adicionales presentes en cuestionarios Kumon
+    "postura":             "Mantiene postura adecuada y distancia correcta al trabajar sobre la hoja.",
+    "manejo del lápiz":    "Domina el agarre y presión del lápiz de forma apropiada para su nivel.",
+    "manejo del lapiz":    "Domina el agarre y presión del lápiz de forma apropiada para su nivel.",
+    "independencia":       "Resuelve los ejercicios sin solicitar ayuda ni validación constante del orientador.",
+    "comprensión lectora": "Comprende instrucciones y enunciados escritos antes de responder.",
+    "comprension lectora": "Comprende instrucciones y enunciados escritos antes de responder.",
+    "velocidad":           "Ejecuta las respuestas a un ritmo apropiado para el nivel evaluado.",
+    "precisión":           "Escribe y responde con exactitud, sin errores de forma ni tachones excesivos.",
+    "precision":           "Escribe y responde con exactitud, sin errores de forma ni tachones excesivos.",
+    "orden":               "Presenta el trabajo de forma ordenada y legible, respetando los espacios de la hoja.",
+    "atención":            "Detecta y corrige sus propios errores sin necesidad de intervención del orientador.",
+    "atencion":            "Detecta y corrige sus propios errores sin necesidad de intervención del orientador.",
+    "perseverancia":       "Continúa trabajando ante la dificultad sin rendirse ni detenerse innecesariamente.",
+    "hábitos de estudio":  "Demuestra rutinas de trabajo consolidadas propias del método Kumon.",
+    "habitos de estudio":  "Demuestra rutinas de trabajo consolidadas propias del método Kumon.",
 }
 
 
@@ -1098,7 +1145,6 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     secciones         = cual.get("secciones") or []
     etiqueta          = cual.get("etiqueta_total") or ""
     pct_total         = cual.get("total_porcentaje")
-    # ── NUEVO: datos del orientador ───────────────────────────────
     observacion_libre = (cual.get("observacion_libre") or "").strip()
     completado_por    = (cual.get("completado_por") or "").strip()
 
@@ -1137,7 +1183,6 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
             "No se registraron valoraciones de actitud en esta evaluación.",
             styles["narrativa"],
         ))
-        # Aun sin secciones, mostrar observación si existe
         if observacion_libre:
             elementos.extend(_bloque_observacion(styles, observacion_libre, completado_por))
         return elementos
@@ -1145,7 +1190,6 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     for sec in secciones:
         nombre  = (sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Área evaluada").strip()
         etiq_s  = sec.get("etiqueta") or ""
-        # FIX BUG A: preservar porcentajes 0 y no pisarlos con `or`
         pct_raw = sec.get("porcentaje")
         if pct_raw is None:
             pct_raw = sec.get("puntaje")
@@ -1153,9 +1197,17 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         lbl_s   = _ETIQ_LABEL.get(etiq_s, etiq_s.capitalize())
         bg_s    = _ETIQ_BG.get(etiq_s, _KUMON_AZUL_L)
         fg_s    = _ETIQ_FG.get(etiq_s, _KUMON_AZUL)
-        desc    = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
 
-        # Fila: nombre + badge etiqueta lado a lado
+        # P-4 FIX: búsqueda exacta primero, luego por substring
+        # cubre títulos largos del backend que contienen el nombre de la dimensión
+        desc = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
+        if not desc:
+            nombre_lower = nombre.lower()
+            for clave, texto in _KUMON_DIMENSION_DESC.items():
+                if clave in nombre_lower or nombre_lower in clave:
+                    desc = texto
+                    break
+
         nombre_par = Paragraph(f"<b>{nombre}</b>", styles["subseccion"])
         badge_par  = _bloque_color(lbl_s, bg=bg_s, fg=fg_s,
                                    ancho=4.5 * cm, font_size=8)
@@ -1170,11 +1222,9 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         ]))
         elementos.append(fila_enc)
 
-        # Descripción pedagógica
         if desc:
             elementos.append(Paragraph(desc, styles["narrativa"]))
 
-        # Barra de progreso + puntaje
         fila_barra = Table(
             [[Paragraph(f"<b>{pct_f:.0f}%</b>", styles["campo_label"]),
               _barra_progreso_rl(
@@ -1192,17 +1242,26 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         elementos.append(HRFlowable(width="100%", thickness=0.3, color=_BORDE))
         elementos.append(Spacer(1, 0.2 * cm))
 
-    # ── NUEVO: Observación del orientador al final ────────────────
-    if observacion_libre:
-        elementos.extend(_bloque_observacion(styles, observacion_libre, completado_por))
+    # C-5 FIX: la observación del orientador solo se renderiza UNA VEZ aquí,
+    # al final de _seccion_cualitativa. El bloque [12b] de generate_pdf()
+    # llama a _seccion_observacion_orientador() de forma independiente,
+    # lo que duplicaba la observación. La solución es que este bloque
+    # (_seccion_cualitativa) NO muestre la observación — eso queda
+    # exclusivamente en [12b] para que aparezca como sección separada
+    # con su propio título "Observaciones del Orientador".
+    # Si no hay bloque [12b] en tu generate_pdf(), reactiva la línea de abajo.
+    # if observacion_libre:
+    #     elementos.extend(_bloque_observacion(styles, observacion_libre, completado_por))
 
     return elementos
+
 
 def _bloque_observacion(styles: Dict, observacion_libre: str, completado_por: str = "") -> list:
     """
     Bloque reutilizable que renderiza la observación libre del orientador.
     Sin mencionar fuente ni sistema — solo el texto del orientador.
-    Se usa en _seccion_cualitativa() del PDF.
+    Se usa como fallback en _seccion_cualitativa() cuando no hay secciones.
+    En el flujo normal la observación va en _seccion_observacion_orientador() [12b].
     """
     elementos = []
     elementos.append(Spacer(1, 0.2 * cm))
@@ -1569,7 +1628,6 @@ def _seccion_pie(
 # Retorna io.BytesIO listo para StreamingResponse.
 # ══════════════════════════════════════════════════════════════════
 
-
 def _generar_imagen_cualitativa(
     cual:          Dict[str, Any],
     nombre_sujeto: str = "—",
@@ -1685,7 +1743,6 @@ def _generar_imagen_cualitativa(
 
     # ── 3. Bloque por dimension ───────────────────────────────────
     for sec in secciones:
-        # FIX Bug-titulo: agregar sec.get("titulo") como fallback
         nombre = (
             sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Area"
         ).strip()
@@ -1702,7 +1759,6 @@ def _generar_imagen_cualitativa(
         fg_s  = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
 
         # FIX Bug-desc: buscar por clave exacta primero, luego por substring
-        # del nombre contra las claves del dict (cubre títulos largos del backend)
         desc = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
         if not desc:
             nombre_lower = nombre.lower()
@@ -1726,6 +1782,7 @@ def _generar_imagen_cualitativa(
         y -= _fraccion_h(0.15)
 
     # ── 4. Observacion del orientador ─────────────────────────────
+    # C-4 FIX: solo dibujar el bloque si hay texto real (no solo espacios).
     if observacion_libre:
         y -= _fraccion_h(0.10)
         y = _draw_section_header(y, "Observacion del orientador",
@@ -1738,6 +1795,13 @@ def _generar_imagen_cualitativa(
         ))
         _draw_text(observacion_libre, 0.05, y - _fraccion_h(0.08),
                    size=8.5, color="#1E3A5F")
+
+        # C-7 FIX: cuando haya observación, mostrar también quién la registró.
+        if completado_por:
+            _draw_text(f"Registrado por: {completado_por}",
+                       0.05, y - _fraccion_h(0.30),
+                       size=7.5, color="#64748B")
+
         y -= bloque_h + _fraccion_h(0.15)
         _draw_hline(y)
         y -= _fraccion_h(0.15)

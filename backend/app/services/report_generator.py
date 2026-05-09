@@ -41,8 +41,8 @@ logger = logging.getLogger(__name__)
 # Debe mantenerse sincronizada con processing_service.calcularresultadointegrado.
 _SEMAFORO_SCORE: Dict[str, float] = {
     "verde":    100.0,
-    "amarillo":  85.0,
-    "rojo":      70.0,
+    "amarillo":  65.0,
+    "rojo":      30.0,
 }
 
 
@@ -312,19 +312,30 @@ def _build_combinado_block(
     activos (rojo_por_flag_critico, penalizado_por_tiempo, etc.).
     El recálculo propio solo aplica cuando el integrado no está disponible.
     """
-    weight_cuant = _normalize_weight(
-        getattr(settings, "BOLETIN_WEIGHT_CUANT", 0.65),
-        0.65,
-    )
-    weight_cual = _normalize_weight(
-        getattr(settings, "BOLETIN_WEIGHT_CUAL", 0.35),
-        0.35,
-    )
+    # P-2 FIX: pesos base 65/35 pero con ajuste por nivel K
+    test_code = (cuant.get("test_code") or "").strip().upper()
+    is_k_level = test_code in ("K", "K1", "K2")
+
+    raw_weight_cuant = getattr(settings, "BOLETIN_WEIGHT_CUANT", 0.65)
+    raw_weight_cual  = getattr(settings, "BOLETIN_WEIGHT_CUAL", 0.35)
+
+    # Si es nivel K, la actitud pesa más (40/60); en otros niveles se mantiene 65/35
+    if is_k_level:
+        default_cuant = 0.40
+        default_cual  = 0.60
+    else:
+        default_cuant = 0.65
+        default_cual  = 0.35
+
+    weight_cuant = _normalize_weight(raw_weight_cuant, default_cuant)
+    weight_cual  = _normalize_weight(raw_weight_cual,  default_cual)
 
     total_weight = weight_cuant + weight_cual
-    if total_weight <= 0:
-        weight_cuant = 0.65
-        weight_cual  = 0.35
+
+    # C-6 FIX: si algún peso es <= 0 o la suma no es válida, usar fallback estable
+    if total_weight <= 0 or weight_cuant <= 0 or weight_cual <= 0:
+        weight_cuant = default_cuant
+        weight_cual  = default_cual
         total_weight = 1.0
 
     weight_cuant = weight_cuant / total_weight
@@ -368,7 +379,6 @@ def _build_combinado_block(
     if score_cuant is None or score_cual is None:
         datos_incompletos = True
         if score_cuant is not None and score_cual is not None:
-            # nunca llega aqui pero es defensivo
             combined_score = round(
                 weight_cuant * score_cuant + weight_cual * score_cual, 1
             )
