@@ -216,6 +216,21 @@ def _flatten_respuestas(respuestas: dict[str, Any] | None) -> dict[str, Any]:
     return flattened
 
 
+# ── Constantes de escala — únicas fuente de verdad ──────────────
+_ESCALA_MIN: float = 1.0
+_ESCALA_MAX: float = 5.0
+
+
+def _normalizar_a_escala(valor: float) -> float:
+    """
+    Fuerza cualquier valor numérico crudo del video a la escala 1–5.
+    Red de seguridad: aunque qualitative_analyzer ya debería normalizar,
+    cualquier valor fuera de rango queda silenciosamente clampado aquí
+    en lugar de propagarse a BD con un valor imposible.
+    """
+    return round(max(_ESCALA_MIN, min(_ESCALA_MAX, valor)), 2)
+
+
 def _build_final_respuestas(
     payload_respuestas: dict[str, Any] | None,
     qual: QualitativeResult | None,
@@ -227,9 +242,12 @@ def _build_final_respuestas(
     1. Prefills del VIDEO (métricas → expandidas a item_ids)
     2. Respuestas del ORIENTADOR (prioridad absoluta)
 
-    FIX: qual.prefills tiene claves de MÉTRICAS (pausas_largas, ritmo_trabajo…)
-    pero calcular_puntaje_cualitativo necesita claves de ITEMS (mantiene_ritmo…).
-    Este helper hace la traducción usando METRICA_A_ITEMS.
+    FIX BUG-1: convertir a float ANTES de setdefault para evitar
+               ZeroDivisionError por listas vacías fantasma.
+    FIX BUG-3: clampear valor_promedio a escala 1–5 antes de guardar
+               en final_respuestas, evitando que valores crudos del
+               video (ej: 14.2 segundos) lleguen a signalfeedback
+               o inflen el cálculo cualitativo.
     """
     final_respuestas: dict[str, dict[str, Any]] = {}
 
@@ -247,48 +265,47 @@ def _build_final_respuestas(
 
     # ── PASO 2: Expandir métricas del video → item_ids ──
     if qual and qual.prefills:
-        # Acumulamos valores por item (puede haber múltiples métricas → promedio)
         item_acumulado: dict[str, list[float]] = {}
         item_confianza: dict[str, list[float]] = {}
 
         for metrica, data in qual.prefills.items():
             if not isinstance(data, dict):
                 continue
-            valor = data.get("valor")
+            valor     = data.get("valor")
             confianza = data.get("confianza", 0.0)
             if valor is None:
                 continue
 
             # BUG-1 FIX: convertir a float ANTES de setdefault.
-            # El patrón anterior llamaba setdefault (creando la lista vacía)
-            # y luego float() dentro del try. Si float() fallaba, el except
-            # capturaba la excepción pero la lista vacía ya estaba registrada
-            # en item_acumulado, causando ZeroDivisionError en el loop inferior.
             try:
                 valor_f     = float(valor)
                 confianza_f = float(confianza)
             except (TypeError, ValueError):
                 continue  # valor no convertible → saltar métrica completa
 
-            # Obtener los items que mapea esta métrica
-            items_metrica = METRICA_A_ITEMS.get(metrica, [])
-
-            for item_id in items_metrica:
-                # Solo inyectar items que existen en ESTE cuestionario
+            for item_id in METRICA_A_ITEMS.get(metrica, []):
                 if items_del_cuestionario and item_id not in items_del_cuestionario:
                     continue
                 item_acumulado.setdefault(item_id, []).append(valor_f)
                 item_confianza.setdefault(item_id, []).append(confianza_f)
 
-        # Promediar y guardar
+        # Promediar, normalizar y guardar
         for item_id, valores in item_acumulado.items():
-            if not valores:  # guardia defensiva: nunca debería pasar con el fix anterior
+            if not valores:  # guardia defensiva
                 continue
-            confianzas = item_confianza[item_id]
+            confianzas         = item_confianza[item_id]
             valor_promedio     = sum(valores)    / len(valores)
             confianza_promedio = sum(confianzas) / len(confianzas)
+
+            # BUG-3 FIX: clampear a 1–5 antes de persistir.
+            # Valores crudos del video (segundos, frames, conteos)
+            # llegan aquí sin normalizar desde qualitative_analyzer.
+            # Sin este clamp se guardan en signalfeedback tal cual
+            # (ej: 14.0) y también inflan el puntaje cualitativo
+            # porque calcular_puntaje_cualitativo hace (v-1)/(5-1),
+            # produciendo (14-1)/4 = 3.25 en vez de 1.0.
             final_respuestas[item_id] = {
-                "valor":     round(valor_promedio, 2),
+                "valor":     _normalizar_a_escala(valor_promedio),
                 "fuente":    "sistema",
                 "corregido": False,
                 "confianza": round(confianza_promedio, 3),
@@ -308,7 +325,6 @@ def _build_final_respuestas(
         }
 
     return final_respuestas
-
 
 def _get_nombre_sujeto(result: TestResult) -> str:
     """

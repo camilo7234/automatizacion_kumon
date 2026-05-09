@@ -78,35 +78,69 @@ def collect_feedback(
             except (TypeError, ValueError):
                 return None
 
-        # ══ SEÑAL TIPO A: una fila por métrica del formulario ════
-        for metrica, datos in respuestas.items():
+        # ── BUG-4 FIX: construir índice inverso item_id → métricas ──
+        # qual.prefills tiene claves de MÉTRICAS (pausas_largas, ritmo_trabajo…)
+        # obs.respuestas tiene claves de ITEMS   (fluidez_calculo, mantiene_ritmo…)
+        # El loop original hacía prefills.get(item_id) — siempre retornaba {}
+        # porque los namespaces son distintos. Nunca se guardaba valor_auto
+        # ni confianza_auto reales — los datos de aprendizaje tipo A eran inútiles.
+        #
+        # Solución: invertir METRICA_A_ITEMS para obtener item_id → [metricas]
+        # y desde ahí buscar los prefills crudos del video correctamente.
+        try:
+            from config.cuestionarios import METRICA_A_ITEMS
+            # Construir: { item_id: [metrica1, metrica2, ...] }
+            item_a_metricas: dict[str, list[str]] = {}
+            for metrica, items in METRICA_A_ITEMS.items():
+                for item_id in items:
+                    item_a_metricas.setdefault(item_id, []).append(metrica)
+        except Exception:
+            item_a_metricas = {}
+
+        # ══ SEÑAL TIPO A: una fila por item del formulario ═══════
+        for item_id, datos in respuestas.items():
             if not isinstance(datos, dict):
                 continue
 
-            prefill_meta   = prefills.get(metrica, {})
-            valor_auto_raw = prefill_meta.get("valor")    if isinstance(prefill_meta, dict) else None
-            confianza_raw  = prefill_meta.get("confianza") if isinstance(prefill_meta, dict) else None
+            # Buscar valor_auto y confianza_auto desde las métricas
+            # del video que mapean a este item_id (promedio si hay varias)
+            valores_auto:    list[float] = []
+            confianzas_auto: list[float] = []
+
+            for metrica in item_a_metricas.get(item_id, []):
+                prefill_meta = prefills.get(metrica)
+                if not isinstance(prefill_meta, dict):
+                    continue
+                v = _num(prefill_meta.get("valor"))
+                c = _num(prefill_meta.get("confianza"))
+                if v is not None:
+                    valores_auto.append(v)
+                if c is not None:
+                    confianzas_auto.append(c)
+
+            valor_auto_final    = round(sum(valores_auto)    / len(valores_auto),    3) if valores_auto    else None
+            confianza_auto_final = round(sum(confianzas_auto) / len(confianzas_auto), 3) if confianzas_auto else None
 
             filas.append(
                 SignalFeedback(
                     id_job         = id_job,
                     subject        = subject,
                     test_code      = test_code,
-                    metrica        = str(metrica),
-                    valor_auto     = _num(valor_auto_raw),
-                    confianza_auto = _num(confianza_raw),
+                    metrica        = str(item_id),
+                    valor_auto     = valor_auto_final,
+                    confianza_auto = confianza_auto_final,
                     valor_final    = _num(datos.get("valor")),
                     fue_corregido  = bool(datos.get("corregido", False)),
                     # Señal B: NULL en fila tipo A
-                    activity_ratio   = None,
-                    num_rewrites     = None,
-                    total_pausas_ms  = None,
-                    speech_rate      = None,
-                    pct_aciertos     = None,
-                    tiempo_ratio     = None,
-                    confidence_ocr   = None,
-                    etiqueta_final   = None,
-                    semaforo         = None,
+                    activity_ratio    = None,
+                    num_rewrites      = None,
+                    total_pausas_ms   = None,
+                    speech_rate       = None,
+                    pct_aciertos      = None,
+                    tiempo_ratio      = None,
+                    confidence_ocr    = None,
+                    etiqueta_final    = None,
+                    semaforo          = None,
                     puntaje_combinado = None,
                 )
             )
@@ -135,7 +169,7 @@ def collect_feedback(
                 id_job         = id_job,
                 subject        = subject,
                 test_code      = test_code,
-                metrica        = None,     # ← indica fila resumen
+                metrica        = None,      # ← indica fila resumen
                 valor_auto     = None,
                 confianza_auto = None,
                 valor_final    = None,

@@ -1986,10 +1986,17 @@ def _normalizar_subject_test_code(subject: str, test_code: str) -> tuple[str, st
 
 
 def _extraer_valor(raw: Any) -> Any:
-    if isinstance(raw, dict) and "valor" in raw:
+    """
+    Solo extrae el valor si fue confirmado por el orientador.
+    Prefills automáticos del sistema (fuente='sistema') NO se usan
+    en el cálculo — son solo sugerencias visuales en el formulario.
+    """
+    if isinstance(raw, dict):
+        fuente = raw.get("fuente", "orientador")
+        if fuente == "sistema":
+            return None  # ← sugerencia automática, no contar
         return raw.get("valor")
     return raw
-
 
 def _normalizar_respuestas_para_calculo(
     cuestionario: Dict[str, Any],
