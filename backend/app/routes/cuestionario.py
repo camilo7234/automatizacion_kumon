@@ -309,6 +309,39 @@ def _build_final_respuestas(
 
     return final_respuestas
 
+
+def _get_nombre_sujeto(result: TestResult) -> str:
+    """
+    Resuelve el nombre del sujeto desde las relaciones ORM del TestResult.
+    Fuente única — elimina la triplicación del mismo bloque en los endpoints.
+    """
+    tipo_sujeto   = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
+    nombre_sujeto = ""
+
+    for obj in [
+        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
+        else getattr(result, "estudiante", None),
+        getattr(result, "prospecto", None),
+        getattr(result, "estudiante", None),
+    ]:
+        if obj is None:
+            continue
+        for attr in ("nombre_completo", "full_name", "display_name", "name"):
+            val = getattr(obj, attr, None)
+            if val:
+                nombre_sujeto = str(val)
+                break
+        if not nombre_sujeto:
+            p = getattr(obj, "primer_nombre", None)
+            a = getattr(obj, "primer_apellido", None)
+            if p or a:
+                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
+        if nombre_sujeto:
+            break
+
+    return nombre_sujeto
+
+
 # ──────────────────────────────────────────────────────────────
 # GET /cuestionario/{result_id}
 # ──────────────────────────────────────────────────────────────
@@ -354,29 +387,7 @@ def get_cuestionario(result_id: UUID, db: Session = Depends(get_db)):
         )
 
     # ── Resolver nombre del sujeto ───────────────────────────────
-    # Misma lógica que get_boletin — fuente única para ambos endpoints.
-    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
-    nombre_sujeto = ""
-    for obj in [
-        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
-        else getattr(result, "estudiante", None),
-        getattr(result, "prospecto", None),
-        getattr(result, "estudiante", None),
-    ]:
-        if obj is None:
-            continue
-        for attr in ("nombre_completo", "full_name", "display_name", "name"):
-            val = getattr(obj, attr, None)
-            if val:
-                nombre_sujeto = str(val)
-                break
-        if not nombre_sujeto:
-            p = getattr(obj, "primer_nombre", None)
-            a = getattr(obj, "primer_apellido", None)
-            if p or a:
-                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
-        if nombre_sujeto:
-            break
+    nombre_sujeto = _get_nombre_sujeto(result)
 
     # ── Respuestas guardadas — aplanadas para que el frontend
     # pueda prerellenar los inputs en modo lectura directamente
@@ -628,28 +639,7 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
     job = result.job
 
     # ── Resolver nombre del sujeto ───────────────────────────────
-    tipo_sujeto = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
-    nombre_sujeto = ""
-    for obj in [
-        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
-        else getattr(result, "estudiante", None),
-        getattr(result, "prospecto", None),
-        getattr(result, "estudiante", None),
-    ]:
-        if obj is None:
-            continue
-        for attr in ("nombre_completo", "full_name", "display_name", "name"):
-            val = getattr(obj, attr, None)
-            if val:
-                nombre_sujeto = str(val)
-                break
-        if not nombre_sujeto:
-            p = getattr(obj, "primer_nombre", None)
-            a = getattr(obj, "primer_apellido", None)
-            if p or a:
-                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
-        if nombre_sujeto:
-            break
+    nombre_sujeto = _get_nombre_sujeto(result)
 
     qnt = QuantitativeInput(
         subject=template.subject,
@@ -1158,28 +1148,7 @@ def get_boletin_pdf(result_id: UUID, db: Session = Depends(get_db)):
     job  = result.job
 
     # ── Obtener nombre del sujeto ────────────────────────────────
-    tipo_sujeto   = (getattr(result, "tipo_sujeto", "") or "").strip().lower()
-    nombre_sujeto = ""
-    for obj in [
-        getattr(result, "prospecto", None) if tipo_sujeto == "prospecto"
-        else getattr(result, "estudiante", None),
-        getattr(result, "prospecto", None),
-        getattr(result, "estudiante", None),
-    ]:
-        if obj is None:
-            continue
-        for attr in ("nombre_completo", "full_name", "display_name", "name"):
-            val = getattr(obj, attr, None)
-            if val:
-                nombre_sujeto = str(val)
-                break
-        if not nombre_sujeto:
-            p = getattr(obj, "primer_nombre", None)
-            a = getattr(obj, "primer_apellido", None)
-            if p or a:
-                nombre_sujeto = " ".join(x for x in [p, a] if x).strip()
-        if nombre_sujeto:
-            break
+    nombre_sujeto = _get_nombre_sujeto(result)
 
     # ── Leer bulletin con refresh ────────────────────────────────
     bulletin = (
