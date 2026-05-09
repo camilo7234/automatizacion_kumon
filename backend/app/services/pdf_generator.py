@@ -857,8 +857,6 @@ def _seccion_encabezado(
         ["Estudiante evaluado:",  nombre_final],
         ["Fecha de evaluación:",  fecha_str],
         ["Materia:",              materia],
-        ["Nivel evaluado:",       nivel_str],
-        ["Código de test:",       cod_test],
         ["Nivel actual:",         nivel_act],
         ["Punto de inicio:",      punto_ini],
     ]
@@ -932,14 +930,24 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
     filas = [
         [Paragraph("<b>Métrica</b>",  styles["campo_label"]),
          Paragraph("<b>Valor</b>",    styles["campo_label"])],
-        ["Tiempo de trabajo", tiempo_str],
+        [Paragraph("Tiempo de trabajo", styles["campo_label"]),
+         Paragraph(tiempo_str,          styles["campo_valor"])],
     ]
     if total is not None:
-        filas.append(["Ejercicios totales", str(total)])
+        filas.append([
+            Paragraph("Ejercicios totales", styles["campo_label"]),
+            Paragraph(str(total),           styles["campo_valor"]),
+        ])
     if aciertos is not None:
-        filas.append(["Aciertos", str(aciertos)])
+        filas.append([
+            Paragraph("Aciertos", styles["campo_label"]),
+            Paragraph(str(aciertos), styles["campo_valor"]),
+        ])
     if errores is not None:
-        filas.append(["Errores",  str(errores)])
+        filas.append([
+            Paragraph("Errores", styles["campo_label"]),
+            Paragraph(str(errores), styles["campo_valor"]),
+        ])
 
     tbl = Table(filas, colWidths=[5.5 * cm, 11.5 * cm])
     tbl.setStyle(_tabla_base_style(len(filas)))
@@ -954,6 +962,7 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
 #     Muestra qué captó el sistema automáticamente con su confianza.
 # ══════════════════════════════════════════════════════════════════
 
+
 def _seccion_prefills(
     styles:     Dict,
     prefills:   Dict[str, Any],
@@ -961,13 +970,16 @@ def _seccion_prefills(
 ) -> list:
     """
     Muestra la tabla de señales validadas automáticamente por
-    el sistema (video, audio, camara) con su confianza y valor.
+    el sistema (video, audio, camara) sin referencia a la fuente.
 
     BUG-04 FIX: se filtra prefills para mostrar SOLO las métricas
     presentes en auto_flags (confianza >= umbral, validadas).
     Las métricas ALWAYS_CONFIRM ([?]) no aparecen en el boletín —
     son datos de trabajo interno del orientador, no del boletín final.
     Esto unifica el criterio con _generar_imagen_cualitativa().
+
+    BUG-FUENTE FIX: eliminada columna Fuente — el boletín muestra
+    solo el dato del estudiante sin indicar el origen de la captura.
     """
     # BUG-04 FIX: mismo filtro que usa _generar_imagen_cualitativa()
     prefills_validados = {
@@ -982,25 +994,23 @@ def _seccion_prefills(
         return elementos
 
     elementos.append(Paragraph(
-        "Senales Validadas Automaticamente", styles["seccion"]
+        "Observaciones del Comportamiento", styles["seccion"]  # ← renombrado: ya no dice "Validadas Automaticamente"
     ))
     elementos.append(Paragraph(
-        "Datos extraidos y validados por el sistema de analisis "
-        "(confianza suficiente para incluirse en el boletin).",
-        styles["aviso_info"]
+        "Aspectos del comportamiento del estudiante registrados durante la prueba.",
+        styles["aviso_info"]  # ← texto sin referencia al sistema ni a la fuente
     ))
     elementos.append(Spacer(1, 0.2 * cm))
 
     filas = [
-        [Paragraph("<b>Metrica</b>",  styles["campo_label"]),
-         Paragraph("<b>Valor</b>",    styles["campo_label"]),
-         Paragraph("<b>Fuente</b>",   styles["campo_label"])],
+        [Paragraph("<b>Aspecto</b>", styles["campo_label"]),   # ← antes "Metrica", ahora más pedagógico
+         Paragraph("<b>Valor</b>",   styles["campo_label"])],   # ← eliminada columna "Fuente"
     ]
     estilos_din: List[tuple] = []
 
     for i, (key, data) in enumerate(prefills_validados.items(), start=1):
-        valor   = data.get("valor", "—")
-        fuente  = _label_fuente(data)
+        valor = data.get("valor", "—")
+        # fuente = _label_fuente(data)  ← ya no se usa, línea eliminada
 
         # Etiqueta legible de la metrica
         key_label = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
@@ -1016,11 +1026,14 @@ def _seccion_prefills(
         else:
             valor_str = str(valor) if valor is not None else "—"
 
-        filas.append([key_label, valor_str, fuente])
+        filas.append([                                          # ← antes era [key_label, valor_str, fuente]
+            Paragraph(key_label, styles["campo_label"]),        # ← envuelto en Paragraph para word-wrap
+            Paragraph(valor_str, styles["campo_valor"]),        # ← envuelto en Paragraph para word-wrap
+        ])
         if i % 2 == 0:
             estilos_din.append(("BACKGROUND", (0, i), (-1, i), _GRIS_CLARO))
 
-    tbl = Table(filas, colWidths=[5.5 * cm, 4.5 * cm, 7 * cm])
+    tbl = Table(filas, colWidths=[7 * cm, 10 * cm])            # ← antes [5.5, 4.5, 7], ahora 2 columnas que suman 17cm
     base_cmds = [
         ("BACKGROUND",    (0, 0), (-1, 0),  _KUMON_AZUL),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  _BLANCO),
@@ -1035,13 +1048,14 @@ def _seccion_prefills(
     tbl.setStyle(TableStyle(base_cmds + estilos_din))
     elementos.append(tbl)
     return elementos
-
 # ══════════════════════════════════════════════════════════════════
 # [9] SECCIÓN 4 — VALORACIÓN CUALITATIVA POR ÁREAS
 #      Pedagogía Kumon: 5 dimensiones de actitud y comportamiento
 #      observadas durante la prueba diagnóstica.
 #      Datos: cualitativo.total_porcentaje, etiqueta_total, secciones
+#             cualitativo.observacion_libre, cualitativo.completado_por
 # ══════════════════════════════════════════════════════════════════
+
 
 # Descripción pedagógica de cada dimensión Kumon.
 # Clave: nombre normalizado (lower + strip). Fallback: texto genérico.
@@ -1063,6 +1077,9 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     Renderiza la valoración cualitativa Kumon con un bloque visual
     por dimensión: nombre pedagógico, descripción, barra de progreso
     y badge de etiqueta. Sin referencias a fuentes de captura.
+
+    Incluye observacion_libre y completado_por del orientador
+    al final de la sección si existen en el bloque cual.
     """
     elementos  = []
     elementos.append(Paragraph("📋  Valoración Cualitativa — Actitud y Comportamiento",
@@ -1074,9 +1091,12 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     ))
     elementos.append(Spacer(1, 0.3 * cm))
 
-    secciones  = cual.get("secciones") or []
-    etiqueta   = cual.get("etiqueta_total") or ""
-    pct_total  = cual.get("total_porcentaje")
+    secciones         = cual.get("secciones") or []
+    etiqueta          = cual.get("etiqueta_total") or ""
+    pct_total         = cual.get("total_porcentaje")
+    # ── NUEVO: datos del orientador ───────────────────────────────
+    observacion_libre = (cual.get("observacion_libre") or "").strip()
+    completado_por    = (cual.get("completado_por") or "").strip()
 
     # ── Badge resumen global ──────────────────────────────────────
     if pct_total is not None and etiqueta:
@@ -1113,6 +1133,9 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
             "No se registraron valoraciones de actitud en esta evaluación.",
             styles["narrativa"],
         ))
+        # Aun sin secciones, mostrar observación si existe
+        if observacion_libre:
+            elementos.extend(_bloque_observacion(styles, observacion_libre, completado_por))
         return elementos
 
     for sec in secciones:
@@ -1162,6 +1185,33 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
         elementos.append(HRFlowable(width="100%", thickness=0.3, color=_BORDE))
         elementos.append(Spacer(1, 0.2 * cm))
 
+    # ── NUEVO: Observación del orientador al final ────────────────
+    if observacion_libre:
+        elementos.extend(_bloque_observacion(styles, observacion_libre, completado_por))
+
+    return elementos
+
+
+def _bloque_observacion(styles: Dict, observacion_libre: str, completado_por: str = "") -> list:
+    """
+    Bloque reutilizable que renderiza la observación libre del orientador.
+    Sin mencionar fuente ni sistema — solo el texto del orientador.
+    Se usa en _seccion_cualitativa() del PDF.
+    """
+    elementos = []
+    elementos.append(Spacer(1, 0.2 * cm))
+    elementos.append(Paragraph(
+        "Observación del orientador",
+        styles["subseccion"],
+    ))
+    elementos.append(Spacer(1, 0.15 * cm))
+    elementos.append(Paragraph(
+        observacion_libre,
+        styles["narrativa"],
+    ))
+    elementos.append(Spacer(1, 0.2 * cm))
+    elementos.append(HRFlowable(width="100%", thickness=0.4, color=_BORDE))
+    elementos.append(Spacer(1, 0.2 * cm))
     return elementos
 
 # ══════════════════════════════════════════════════════════════════
@@ -1513,6 +1563,7 @@ def _seccion_pie(
 # Retorna io.BytesIO listo para StreamingResponse.
 # ══════════════════════════════════════════════════════════════════
 
+
 def _generar_imagen_cualitativa(
     cual:          Dict[str, Any],
     nombre_sujeto: str = "—",
@@ -1523,46 +1574,28 @@ def _generar_imagen_cualitativa(
     Dimensiones: ancho fijo 900px, alto dinámico según número de áreas.
 
     Estructura visual:
-      1. Encabezado — nombre del alumno + fecha + orientador
+      1. Encabezado — nombre del alumno + fecha
       2. Badge global — etiqueta + puntaje total + barra
       3. Bloque por dimension — nombre, descripcion, barra coloreada
-      4. Senales validadas automaticamente (solo auto_flags)
-      5. Observacion del orientador (si existe)
-      6. Ajustes registrados por el orientador (si existen)
-      7. Pie — Kumon Ipiales
+      4. Observacion del orientador (si existe)
+      5. Pie — Kumon Ipiales
 
-    BUG-05 FIX: fallback de etiqueta usa .replace("_", " ").capitalize()
-                para evitar guiones bajos visibles ("En_desarrollo" → "En desarrollo").
-    BUG-06 FIX: formato de correcciones cambiado de "X -> Y" a
-                "Antes: X  →  Ahora: Y" para legibilidad del orientador.
+    Sin fuentes de captura, sin señales automáticas, sin correcciones técnicas.
     """
     secciones         = cual.get("secciones") or []
     etiqueta          = cual.get("etiqueta_total") or ""
     pct_total         = float(cual.get("total_porcentaje") or 0)
-    # BUG-05 FIX: reemplazar guion bajo antes del capitalize()
     etiq_lbl          = _ETIQ_LABEL.get(etiqueta, etiqueta.replace("_", " ").capitalize())
     observacion_libre = (cual.get("observacion_libre") or "").strip()
-    correcciones      = cual.get("correcciones_orientador") or {}
     completado_por    = (cual.get("completado_por") or "").strip()
-    prefills          = cual.get("prefills") or {}
-    auto_flags        = cual.get("auto_flags") or []
 
-    # Solo las metricas validadas automaticamente
-    senales_validadas = {
-        k: v for k, v in prefills.items()
-        if k in auto_flags and isinstance(v, dict)
-    }
+    n = len(secciones)
 
-    n        = len(secciones)
-    n_corr   = len(correcciones)
-    n_sen    = len(senales_validadas)
-
+    # Alto dinámico: encabezado + badge + dimensiones + observación (escala con longitud)
     fig_h = (
         3.5
         + n * 1.4
-        + (0.5 + n_sen * 0.38 if n_sen else 0)
-        + (1.4 if observacion_libre else 0)
-        + (0.5 + n_corr * 0.35 if n_corr else 0)
+        + (1.4 + len(observacion_libre) / 120 if observacion_libre else 0)
     )
     fig_w = 10
 
@@ -1623,8 +1656,8 @@ def _generar_imagen_cualitativa(
     _draw_text(f"{nombre_sujeto}   -   Fecha: {fecha_str}",
                0.5, y - _fraccion_h(0.38),
                size=9, color="#BFD7FF", ha="center")
-    orientador_txt = f"Orientador: {completado_por}" if completado_por else "Metodo Kumon — Uso interno"
-    _draw_text(orientador_txt,
+    # Sin mencionar orientador ni fuente — solo identificación institucional
+    _draw_text("Metodo Kumon — Ipiales",
                0.5, y - _fraccion_h(0.60),
                size=7.5, color="#7BA7D4", ha="center")
     y -= _fraccion_h(0.85)
@@ -1650,7 +1683,6 @@ def _generar_imagen_cualitativa(
         nombre = (sec.get("nombre") or sec.get("name") or "Area").strip()
         etiq_s = sec.get("etiqueta") or ""
         pct_s  = float(sec.get("porcentaje") or sec.get("puntaje") or 0)
-        # BUG-05 FIX: mismo fix en el fallback de cada sección
         lbl_s  = _ETIQ_LABEL.get(etiq_s, etiq_s.replace("_", " ").capitalize())
         fg_s   = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
         desc   = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
@@ -1669,78 +1701,25 @@ def _generar_imagen_cualitativa(
         _draw_hline(y)
         y -= _fraccion_h(0.15)
 
-    # ── 4. Senales validadas automaticamente ─────────────────────
-    if senales_validadas:
-        y -= _fraccion_h(0.10)
-        y = _draw_section_header(
-            y,
-            "Observaciones del sistema — senales validadas",
-            bg="#F0FDF4", fg="#166534",
-        )
-        for key, data in senales_validadas.items():
-            metrica_lbl = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
-            valor       = data.get("valor")
-            valor_map   = _PREFILL_VALOR_LABELS.get(key, {})
-
-            if isinstance(valor, bool):
-                valor_str = "Si" if valor else "No"
-            elif isinstance(valor, float):
-                valor_str = valor_map.get(str(valor), f"{valor:.2f}")
-            elif isinstance(valor, str):
-                valor_str = valor_map.get(valor, valor.capitalize())
-            else:
-                valor_str = str(valor) if valor is not None else "—"
-
-            linea = f"{metrica_lbl}:   {valor_str}"
-            _draw_text(linea, 0.05, y, size=8.5, color="#14532D")
-            y -= _fraccion_h(0.30)
-
-        _draw_hline(y)
-        y -= _fraccion_h(0.15)
-
-    # ── 5. Observacion del orientador ─────────────────────────────
+    # ── 4. Observacion del orientador ─────────────────────────────
     if observacion_libre:
         y -= _fraccion_h(0.10)
         y = _draw_section_header(y, "Observacion del orientador",
                                  bg="#EFF6FF", fg="#1D4ED8")
+        # Alto del cuadro proporcional a la longitud del texto
+        bloque_h = max(_fraccion_h(0.90), _fraccion_h(0.30 + len(observacion_libre) / 120))
         ax.add_patch(plt.Rectangle(
-            (0.03, y - _fraccion_h(0.90)), 0.94, _fraccion_h(0.90),
+            (0.03, y - bloque_h), 0.94, bloque_h,
             transform=ax.transAxes, color="#EFF6FF",
             clip_on=False, zorder=1,
         ))
         _draw_text(observacion_libre, 0.05, y - _fraccion_h(0.08),
                    size=8.5, color="#1E3A5F")
-        y -= _fraccion_h(1.05)
+        y -= bloque_h + _fraccion_h(0.15)
         _draw_hline(y)
         y -= _fraccion_h(0.15)
 
-    # ── 6. Ajustes registrados por el orientador ──────────────────
-    if correcciones:
-        y -= _fraccion_h(0.10)
-        y = _draw_section_header(y, "Ajustes registrados por el orientador",
-                                 bg="#FFF7ED", fg="#C2410C")
-        _LABELS_CORR = {
-            "etiqueta_total":   "Nivel general",
-            "total_porcentaje": "Puntaje total",
-            "semaforo":         "Semaforo",
-            "recommendation":   "Recomendacion",
-        }
-        for campo, val in correcciones.items():
-            campo_lbl = _LABELS_CORR.get(campo, str(campo).replace("_", " ").capitalize())
-            if isinstance(val, dict):
-                anterior = val.get("anterior", "—")
-                nuevo    = val.get("nuevo", val.get("valor", "—"))
-                # BUG-06 FIX: formato legible para el orientador
-                val_str  = f"Antes: {anterior}   →   Ahora: {nuevo}"
-            else:
-                val_str = str(val)
-            _draw_text(f"  {campo_lbl}:  {val_str}", 0.05, y,
-                       size=8, color="#7C2D12")
-            y -= _fraccion_h(0.30)
-        _draw_hline(y)
-        y -= _fraccion_h(0.15)
-
-    # ── 7. Pie ────────────────────────────────────────────────────
+    # ── 5. Pie ────────────────────────────────────────────────────
     _draw_text("Kumon Ipiales  -  Boletin de Diagnostico",
                0.5, _fraccion_h(0.12),
                size=7.5, color="#94A3B8", ha="center")

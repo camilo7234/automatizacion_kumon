@@ -508,18 +508,13 @@ def submit_cuestionario(
             type(exc).__name__,
             exc,
         )
-    # ✅ RETURN AGREGADO — resuelve ResponseValidationError (input: None)
     return CuestionarioSubmitResponse(
-        id_observacion=obs.id_observacion,
+        observacion_id=obs.id_observacion,
         result_id=obs.id_result,
-        subject=obs.subject,
-        test_code=obs.test_code,
-        puntaje_cualitativo=obs.puntaje_cualitativo,
-        etiqueta_cualitativa=obs.etiqueta_cualitativa,
-        esta_completo=obs.esta_completo,
-        completado_por=obs.completado_por,
-        completado_at=obs.completado_at,
-        detalle_secciones=obs.detalle_secciones,
+        total_porcentaje=obs.puntaje_cualitativo,
+        etiqueta_total=obs.etiqueta_cualitativa,
+        secciones=obs.detalle_secciones or [],
+        boletin_habilitado=bool(obs.esta_completo),
     )
 
 
