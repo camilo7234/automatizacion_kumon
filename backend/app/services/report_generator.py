@@ -270,14 +270,17 @@ def _build_cualitativo_block(q: QualitativeInput) -> Dict[str, Any]:
     evita persistir prefills: {} vacío innecesariamente en BD.
     """
     block: Dict[str, Any] = {
-        "total_porcentaje":        round(float(q.total_porcentaje), 1),
-        "etiqueta_total":          q.etiqueta_total,
-        "secciones":               q.secciones,
-        "auto_flags":              q.auto_flags,
-        "observacion_libre":       q.observacion_libre or None,
-        "correcciones_orientador": q.correcciones_orientador or {},
-        "completado_por":          q.completado_por or None,
+        "total_porcentaje":  round(float(q.total_porcentaje), 1),
+        "etiqueta_total":    q.etiqueta_total,
+        "secciones":         q.secciones,
+        "auto_flags":        q.auto_flags,
+        "observacion_libre": q.observacion_libre or None,
+        "completado_por":    q.completado_por or None,
     }
+
+    # Igual que prefills: solo incluir si tiene datos reales
+    if q.correcciones_orientador:
+        block["correcciones_orientador"] = q.correcciones_orientador
 
     # BUG-10 FIX: solo incluir prefills si tiene datos reales
     if q.prefills:
@@ -335,7 +338,6 @@ def _build_combinado_block(
     if (
         integrado is not None
         and integrado.get("score_final") is not None
-        and integrado.get("override") is not None
     ):
         combined_score = _to_float(integrado.get("score_final"))
         etiqueta = _classify_combined_label(combined_score)
@@ -348,9 +350,7 @@ def _build_combinado_block(
         return {
             "puntaje":   combined_score,
             "etiqueta":  etiqueta,
-            # BUG-04-A FIX: pasar el override para que override_note se renderice en el PDF
             "override":  integrado.get("override"),
-            # BUG-04-B FIX: incluir formula para que _build_pdf_html no imprima None
             "formula":   f"{round(weight_cuant * 100):.0f}% cuantitativo + {round(weight_cual * 100):.0f}% cualitativo (ajuste aplicado)",
             "kpi": {
                 "cuantitativo": {
@@ -364,7 +364,6 @@ def _build_combinado_block(
             },
             "narrativa": narrative,
         }
-
     datos_incompletos = False
     if score_cuant is None or score_cual is None:
         datos_incompletos = True

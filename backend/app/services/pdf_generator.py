@@ -178,11 +178,11 @@ _ETIQ_MPL_BG: Dict[str, str] = {
 
 # ── Fuente de cada prefill automático ────────────────────────────
 _FUENTE_ICONO: Dict[str, str] = {
-    "video":  "Registro en video",
-    "audio":  "Registro en audio",
-    "camara": "Registro fotográfico",
+    "video":   "Registro en video",
+    "audio":   "Registro en audio",
+    "camara":  "Registro fotográfico",
+    "sistema": "Análisis automático",
 }
-
 
 def _build_styles() -> Dict[str, ParagraphStyle]:
     """
@@ -319,9 +319,8 @@ def _parsear_tiempo(estudio: Optional[float], objetivo: Optional[float]) -> str:
     txt = _fmt(estudio)
     if objetivo is not None:
         txt += f"  (objetivo: {_fmt(objetivo)})"
-        txt += "  — dentro del tiempo" if estudio <= objetivo else "  — tardó mas del objetivo"
+        txt += "  — dentro del tiempo" if estudio <= objetivo else "  — tardó más del objetivo"
     return txt
-
 
 def _parsear_display_name(cuant: Dict[str, Any]) -> str:
     """Combina display_name y ws en un string legible para el encabezado."""
@@ -336,13 +335,12 @@ def _label_fuente(prefill_item: Dict[str, Any]) -> str:
     """Retorna texto con fuente e icono para la tabla de prefills."""
     fuente = prefill_item.get("fuente", "")
     conf   = prefill_item.get("confianza")
-    icono  = _FUENTE_ICONO.get(fuente, "[Auto]")   # fallback ASCII, no emoji/Unicode
+    label  = _FUENTE_ICONO.get(fuente, fuente.capitalize() or "Automático")
     try:
         conf_txt = f" ({float(conf)*100:.0f}%)" if conf is not None else ""
     except (TypeError, ValueError):
         conf_txt = ""
-    return f"{icono} {fuente.capitalize()}{conf_txt}"
-
+    return f"{label}{conf_txt}"
 # ══════════════════════════════════════════════════════════════════
 # [3] COMPONENTES VISUALES REUTILIZABLES
 # ══════════════════════════════════════════════════════════════════
@@ -887,6 +885,69 @@ def _seccion_encabezado(
     tbl.setStyle(TableStyle(cmds))
     elementos.append(tbl)
     return elementos
+
+
+# ══════════════════════════════════════════════════════════════════
+# [8] SECCIÓN 2 — RESULTADO CUANTITATIVO
+#     Datos usados: score, semaforo, tiempo_estudio, tiempo_objetivo,
+#                   aciertos, errores, total_ejercicios
+# ══════════════════════════════════════════════════════════════════
+
+def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
+    """
+    Muestra el resultado numérico del test diagnóstico:
+    semáforo de desempeño, puntaje, tiempo y tabla de aciertos/errores.
+    No incluye starting_point ni recommendation — esos van en sección [13].
+    """
+    elementos = []
+    elementos.append(Paragraph("📊  Resultado del Test Diagnóstico", styles["seccion"]))
+
+    score      = cuant.get("score")
+    semaforo   = (cuant.get("semaforo") or "").strip().lower()
+    sem_color  = _SEM_COLOR.get(semaforo, _KUMON_AZUL_M)
+    sem_texto  = _SEM_TEXTO.get(semaforo, "")
+
+    # ── Badge semáforo ────────────────────────────────────────────
+    if score is not None:
+        elementos.append(_bloque_color(
+            f"Puntaje: {score:.1f} / 100",
+            bg=sem_color, font_size=13,
+        ))
+        elementos.append(Spacer(1, 0.2 * cm))
+
+    if sem_texto:
+        elementos.append(Paragraph(sem_texto, styles["narrativa_azul"]))
+        elementos.append(Spacer(1, 0.15 * cm))
+
+    # ── Tabla de métricas del test ────────────────────────────────
+    tiempo_str = _parsear_tiempo(
+        cuant.get("tiempo_estudio"),
+        cuant.get("tiempo_objetivo"),
+    )
+
+    aciertos  = cuant.get("aciertos")
+    errores   = cuant.get("errores")
+    total     = cuant.get("total_ejercicios")
+
+    filas = [
+        [Paragraph("<b>Métrica</b>",  styles["campo_label"]),
+         Paragraph("<b>Valor</b>",    styles["campo_label"])],
+        ["Tiempo de trabajo", tiempo_str],
+    ]
+    if total is not None:
+        filas.append(["Ejercicios totales", str(total)])
+    if aciertos is not None:
+        filas.append(["Aciertos", str(aciertos)])
+    if errores is not None:
+        filas.append(["Errores",  str(errores)])
+
+    tbl = Table(filas, colWidths=[5.5 * cm, 11.5 * cm])
+    tbl.setStyle(_tabla_base_style(len(filas)))
+    elementos.append(tbl)
+
+    return elementos
+
+
 # ══════════════════════════════════════════════════════════════════
 # [9] SECCIÓN 3 — PREFILLS AUTOMÁTICOS (VIDEO / AUDIO / CÁMARA)
 #     Datos usados: cualitativo.prefills, cualitativo.auto_flags
@@ -1005,7 +1066,7 @@ def _seccion_cualitativa(styles: Dict, cual: Dict[str, Any]) -> list:
     """
     elementos  = []
     elementos.append(Paragraph("📋  Valoración Cualitativa — Actitud y Comportamiento",
-                                styles["seccion"]))
+                                styles["seccion_emoji"]))
     elementos.append(Paragraph(
         "Valoración de las dimensiones de actitud observadas durante la prueba diagnóstica, "
         "conforme al método Kumon.",
@@ -1120,7 +1181,7 @@ def _seccion_grafica_cualitativa(
     img = _grafica_barras_secciones(secciones, ancho_cm=15)
     if img:
         elementos.append(KeepTogether([
-            Paragraph("📈  Gráfica de desempeño por área", styles["subseccion"]),
+            Paragraph("📈  Gráfica de desempeño por área", styles["seccion_emoji"]),
             Spacer(1, 0.15 * cm),
             img,
         ]))
@@ -1243,7 +1304,7 @@ def _seccion_gaze(styles: Dict, gaze: Dict[str, Any]) -> list:
     Actualmente reservado — aparece solo si gaze llega con datos.
     """
     elementos = []
-    elementos.append(Paragraph("📷  Análisis de Atención Visual (Cámara)", styles["seccion"]))
+    elementos.append(Paragraph("📷  Análisis de Atención Visual (Cámara)", styles["seccion_emoji"]))
     elementos.append(Paragraph(
         "Datos capturados por la cámara frontal durante la sesión.",
         styles["aviso_info"]
@@ -1286,7 +1347,7 @@ def _seccion_observacion_orientador(
     """
     elementos = []
     elementos.append(Paragraph(
-        "✏️  Observaciones del Orientador", styles["seccion"]
+        "✏️  Observaciones del Orientador", styles["seccion_emoji"]
     ))
 
     # ── Quién completó el cuestionario ───────────────────────────
@@ -1314,15 +1375,30 @@ def _seccion_observacion_orientador(
         ))
         elementos.append(Spacer(1, 0.1 * cm))
 
+        _LABELS_CORR = {
+            "etiqueta_total":   "Nivel general",
+            "total_porcentaje": "Puntaje total",
+            "semaforo":         "Semáforo",
+            "recommendation":   "Recomendación",
+        }
+
         filas = [
-            [Paragraph("<b>Campo</b>",    styles["campo_label"]),
+            [Paragraph("<b>Campo</b>",      styles["campo_label"]),
              Paragraph("<b>Corrección</b>", styles["campo_label"])],
         ]
         for campo, valor in correcciones.items():
-            filas.append([
+            campo_lbl = _LABELS_CORR.get(
+                campo,
                 campo.replace("_", " ").capitalize(),
-                str(valor) if valor is not None else "—",
-            ])
+            )
+            if isinstance(valor, dict):
+                anterior = valor.get("anterior", "—")
+                nuevo    = valor.get("nuevo", valor.get("valor", "—"))
+                valor_str = f"Antes: {anterior}   →   Ahora: {nuevo}"
+            else:
+                valor_str = str(valor) if valor is not None else "—"
+
+            filas.append([campo_lbl, valor_str])
 
         tbl = Table(filas, colWidths=[6 * cm, 11 * cm])
         tbl.setStyle(_tabla_base_style(len(filas), header_color=_KUMON_AZUL_2))
@@ -1348,7 +1424,7 @@ def _seccion_recomendacion(
     calculado por result_calculator, en un bloque de acción clara.
     """
     elementos = []
-    elementos.append(Paragraph("🎯  Recomendación y Punto de Partida", styles["seccion"]))
+    elementos.append(Paragraph("🎯  Recomendación y Punto de Partida", styles["seccion_emoji"]))
 
     recomendacion = cuant.get("recommendation") or ""
     starting      = _parsear_starting_point(cuant.get("starting_point"))
@@ -1398,8 +1474,9 @@ def _seccion_pie(
     Pie de página con información institucional, confidencialidad
     y aviso si el orientador realizó correcciones manuales.
     """
+    from datetime import timezone, timedelta
     elementos = []
-    ahora = datetime.now().strftime("%d/%m/%Y  %H:%M")
+    ahora = datetime.now(tz=timezone(timedelta(hours=-5))).strftime("%d/%m/%Y  %H:%M")
 
     elementos.append(Paragraph(
         f"Generado automáticamente por el sistema de diagnóstico Kumon Ipiales  ·  {ahora}",

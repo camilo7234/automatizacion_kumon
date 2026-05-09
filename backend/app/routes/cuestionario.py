@@ -22,6 +22,7 @@ Flujo:
 """
 import copy
 import io
+import logging
 from xml.sax.saxutils import escape
 from datetime import datetime, timezone
 from typing import Any
@@ -490,13 +491,12 @@ def submit_cuestionario(
         db.commit()
     except Exception as exc:
         db.rollback()
-        logger.warning(
+        logging.warning(
             "collect_feedback fallo para result_id=%s — %s: %s",
             result_id,
             type(exc).__name__,
             exc,
         )
-
     # ✅ RETURN AGREGADO — resuelve ResponseValidationError (input: None)
     return CuestionarioSubmitResponse(
         id_observacion=obs.id_observacion,
@@ -510,6 +510,8 @@ def submit_cuestionario(
         completado_at=obs.completado_at,
         detalle_secciones=obs.detalle_secciones,
     )
+
+
 # ──────────────────────────────────────────────────────────────
 # GET /boletin/{result_id}
 # ──────────────────────────────────────────────────────────────
@@ -827,21 +829,18 @@ def patch_boletin(
     datos["_auditoria_correcciones"] = audit
 
     # ── BUG-4A FIX: sincronizar columnas de índice con datos corregidos ──
-    # Cada vez que el orientador guarda cambios, las columnas escalares de
-    # Bulletin deben reflejar lo que hay en datos_boletin, no el snapshot
-    # original. Esto garantiza que PDF, UI y queries de BD siempre leen
-    # exactamente el mismo estado.
     comb_nuevo  = datos.get("combinado",    {}) or {}
     cuant_nuevo = datos.get("cuantitativo", {}) or {}
+    cual_nuevo  = datos.get("cualitativo",  {}) or {}
 
-    bulletin.datos_boletin     = datos
-    bulletin.status            = "ready"
-    bulletin.puntaje_combinado = comb_nuevo.get("puntaje",  bulletin.puntaje_combinado)
-    bulletin.etiqueta_combinada = comb_nuevo.get("etiqueta", bulletin.etiqueta_combinada)
-    bulletin.puntaje_cuantitativo = cuant_nuevo.get("score_index", bulletin.puntaje_cuantitativo)
+    bulletin.datos_boletin        = datos
+    bulletin.status               = "ready"
+    bulletin.puntaje_combinado    = comb_nuevo.get("puntaje",           bulletin.puntaje_combinado)
+    bulletin.etiqueta_combinada   = comb_nuevo.get("etiqueta",          bulletin.etiqueta_combinada)
+    bulletin.puntaje_cuantitativo = cuant_nuevo.get("score_index",      bulletin.puntaje_cuantitativo)
+    bulletin.puntaje_cualitativo  = cual_nuevo.get("total_porcentaje",  bulletin.puntaje_cualitativo)
     # nombre_sujeto en cuant es display — no hay columna de índice propia,
     # pero se preserva en datos_boletin para que PDF lo lea correctamente.
-
     db.add(bulletin)
     db.commit()
     db.refresh(bulletin)
