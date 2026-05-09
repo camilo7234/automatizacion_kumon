@@ -2028,6 +2028,14 @@ def _calcular_seccion(
     min_v: int,
     max_v: int,
 ):
+    """
+    Calcula el puntaje porcentual de una sección.
+
+    Conversión escala 1-5 → porcentaje:
+      pct = val / max_v * 100
+    Esto respeta la filosofía Kumon donde 1/5 = 20% (no 0%),
+    ningún estudiante parte desde cero, y 4/5 = 80% (Grupo 2 Kumon).
+    """
     items = seccion.get("items", [])
     if not items:
         return 0.0, 0.0, 0
@@ -2047,7 +2055,11 @@ def _calcular_seccion(
             continue
 
         val = max(min_v, min(max_v, float(raw)))
-        pct = (val - min_v) / (max_v - min_v) * 100.0
+
+        # ── FIX: escala Kumon 1-5 donde 1=20%, 4=80%, 5=100%
+        # Fórmula anterior: (val - min_v) / (max_v - min_v) * 100
+        # producía 4/5 = 75% → caía en "en_desarrollo" incorrectamente.
+        pct = val / max_v * 100.0
 
         acum += pct * i_peso
         peso_total += i_peso
@@ -2058,13 +2070,29 @@ def _calcular_seccion(
 
     return acum / peso_total, peso_total, preguntas_resp
 
-
 def _clasificar(porcentaje: float) -> str:
-    if porcentaje >= 76:
+    """
+    Clasifica porcentaje 0-100 en etiqueta cualitativa.
+
+    Alineado con los 5 grupos del método oficial Kumon
+    (SUT Manual — Time & Accuracy Groups):
+      Grupo 1-2 (Excelente/Bueno)     → fortaleza     (>= 80%)
+      Grupo 3   (Suficiente)           → en_desarrollo (>= 60%)
+      Grupo 4   (Insuficiente)         → refuerzo      (>= 40%)
+      Grupo 5   (Pobre)                → atencion      (<  40%)
+
+    Con escala 1-5 (pct = val/5*100):
+      5/5 = 100% → fortaleza
+      4/5 =  80% → fortaleza
+      3/5 =  60% → en_desarrollo
+      2/5 =  40% → refuerzo
+      1/5 =  20% → atencion
+    """
+    if porcentaje >= 80:
         return "fortaleza"
-    elif porcentaje >= 51:
+    elif porcentaje >= 60:
         return "en_desarrollo"
-    elif porcentaje >= 26:
+    elif porcentaje >= 40:
         return "refuerzo"
     else:
         return "atencion"

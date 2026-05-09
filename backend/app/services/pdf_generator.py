@@ -456,6 +456,7 @@ def _barra_progreso_rl(
 #     Paleta: colores por etiqueta cualitativa (_ETIQ_MPL_BG).
 # ══════════════════════════════════════════════════════════════════
 
+
 def _grafica_barras_secciones(
     secciones: List[Dict[str, Any]],
     ancho_cm: float = 15,
@@ -476,25 +477,33 @@ def _grafica_barras_secciones(
 
     for sec in secciones:
         nombre = sec.get("nombre") or sec.get("name") or "Área"
-        pct    = sec.get("porcentaje") or sec.get("puntaje") or 0.0
+        # FIX Bug-5: usar get() con None explícito para no perder el 0 real
+        pct_raw = sec.get("porcentaje")
+        if pct_raw is None:
+            pct_raw = sec.get("puntaje")
+        pct = float(pct_raw) if pct_raw is not None else 0.0
         etiq   = sec.get("etiqueta") or "en_desarrollo"
         nombres.append(nombre)
-        puntajes.append(float(pct))
+        puntajes.append(pct)
         colores.append(_ETIQ_MPL_BG.get(etiq, "#3B82F6"))
 
     n      = len(nombres)
-    alto_i = alto_cm or max(3.5, n * 0.75 + 1.5)
+    # FIX menor: mínimo 4.0cm y factor 0.9 por sección evita colisión de etiquetas
+    alto_i = alto_cm or max(4.0, n * 0.9 + 1.5)
 
     fig, ax = plt.subplots(figsize=(ancho_cm / 2.54, alto_i / 2.54))
 
-    # Barras horizontales
-    y_pos = np.arange(n)
-    bars  = ax.barh(y_pos, puntajes, color=colores, height=0.55,
-                    edgecolor="white", linewidth=0.5)
+    # FIX Bug-6: invertir y_pos para que la primera sección quede arriba
+    # barh() dibuja de menor a mayor en Y, por eso np.arange normal
+    # deja la última sección arriba. Al invertir, el orden visual
+    # coincide con el orden lógico de la tabla de áreas.
+    y_pos   = np.arange(n - 1, -1, -1)
+    bars    = ax.barh(y_pos, puntajes, color=colores, height=0.55,
+                      edgecolor="white", linewidth=0.5)
 
     # Etiquetas de valor dentro / fuera de la barra
     for bar, val in zip(bars, puntajes):
-        x_txt = val - 4 if val > 15 else val + 1.5
+        x_txt     = val - 4 if val > 15 else val + 1.5
         color_txt = "white" if val > 15 else "#1E293B"
         ha        = "right"  if val > 15 else "left"
         ax.text(x_txt, bar.get_y() + bar.get_height() / 2,
@@ -541,7 +550,6 @@ def _grafica_barras_secciones(
     plt.close(fig)
     buf.seek(0)
     return Image(buf, width=ancho_cm * cm, height=alto_i * cm)
-
 
 # ══════════════════════════════════════════════════════════════════
 # [5] GRÁFICA DE ARCO — PUNTAJE GLOBAL COMBINADO
@@ -919,13 +927,13 @@ def _seccion_cuantitativo(styles: Dict, cuant: Dict[str, Any]) -> list:
 
     # ── Tabla de métricas del test ────────────────────────────────
     tiempo_str = _parsear_tiempo(
-        cuant.get("tiempo_estudio"),
-        cuant.get("tiempo_objetivo"),
+        cuant.get("study_time_min"),
+        cuant.get("target_time_min"),
     )
 
-    aciertos  = cuant.get("aciertos")
-    errores   = cuant.get("errores")
-    total     = cuant.get("total_ejercicios")
+    aciertos  = cuant.get("correct_answers")
+    errores   = None
+    total     = cuant.get("total_questions")
 
     filas = [
         [Paragraph("<b>Métrica</b>",  styles["campo_label"]),
@@ -969,53 +977,49 @@ def _seccion_prefills(
     auto_flags: List[str],
 ) -> list:
     """
-    Muestra la tabla de señales validadas automáticamente por
-    el sistema (video, audio, camara) sin referencia a la fuente.
+    Muestra la tabla de aspectos del comportamiento del estudiante
+    registrados durante la prueba diagnóstica.
 
-    BUG-04 FIX: se filtra prefills para mostrar SOLO las métricas
-    presentes en auto_flags (confianza >= umbral, validadas).
-    Las métricas ALWAYS_CONFIRM ([?]) no aparecen en el boletín —
-    son datos de trabajo interno del orientador, no del boletín final.
-    Esto unifica el criterio con _generar_imagen_cualitativa().
-
-    BUG-FUENTE FIX: eliminada columna Fuente — el boletín muestra
-    solo el dato del estudiante sin indicar el origen de la captura.
+    FIX: se eliminó el filtro por auto_flags que dejaba la sección
+    vacía cuando el pipeline no llenaba esa lista. Ahora se muestran
+    todos los prefills que tengan un valor real (no None, no vacío).
+    No se menciona fuente, confianza ni origen de los datos.
+    El boletín muestra resultados pedagógicos, no metadatos internos.
     """
-    # BUG-04 FIX: mismo filtro que usa _generar_imagen_cualitativa()
+    # FIX: mostrar cualquier prefill que tenga valor real
+    # sin depender de auto_flags ni evaluar confianza
     prefills_validados = {
         k: v for k, v in prefills.items()
-        if k in auto_flags and isinstance(v, dict)
+        if isinstance(v, dict) and v.get("valor") is not None
     }
 
     elementos = []
 
-    # Si no hay ninguna señal validada, no renderizar la sección
     if not prefills_validados:
         return elementos
 
     elementos.append(Paragraph(
-        "Observaciones del Comportamiento", styles["seccion"]  # ← renombrado: ya no dice "Validadas Automaticamente"
+        "Observaciones del Comportamiento durante la Prueba", styles["seccion"]
     ))
     elementos.append(Paragraph(
-        "Aspectos del comportamiento del estudiante registrados durante la prueba.",
-        styles["aviso_info"]  # ← texto sin referencia al sistema ni a la fuente
+        "Aspectos del comportamiento del estudiante observados durante la prueba diagnóstica.",
+        styles["aviso_info"]
     ))
     elementos.append(Spacer(1, 0.2 * cm))
 
     filas = [
-        [Paragraph("<b>Aspecto</b>", styles["campo_label"]),   # ← antes "Metrica", ahora más pedagógico
-         Paragraph("<b>Valor</b>",   styles["campo_label"])],   # ← eliminada columna "Fuente"
+        [Paragraph("<b>Aspecto</b>", styles["campo_label"]),
+         Paragraph("<b>Valor</b>",   styles["campo_label"])],
     ]
     estilos_din: List[tuple] = []
 
     for i, (key, data) in enumerate(prefills_validados.items(), start=1):
         valor = data.get("valor", "—")
-        # fuente = _label_fuente(data)  ← ya no se usa, línea eliminada
 
-        # Etiqueta legible de la metrica
+        # Etiqueta legible del aspecto
         key_label = _PREFILL_LABELS.get(key, key.replace("_", " ").capitalize())
 
-        # Valor legible
+        # Valor legible — sin mostrar confianza ni fuente
         valor_map = _PREFILL_VALOR_LABELS.get(key, {})
         if isinstance(valor, float):
             valor_str = valor_map.get(str(valor), f"{valor:.3f}")
@@ -1026,14 +1030,14 @@ def _seccion_prefills(
         else:
             valor_str = str(valor) if valor is not None else "—"
 
-        filas.append([                                          # ← antes era [key_label, valor_str, fuente]
-            Paragraph(key_label, styles["campo_label"]),        # ← envuelto en Paragraph para word-wrap
-            Paragraph(valor_str, styles["campo_valor"]),        # ← envuelto en Paragraph para word-wrap
+        filas.append([
+            Paragraph(key_label, styles["campo_label"]),
+            Paragraph(valor_str, styles["campo_valor"]),
         ])
         if i % 2 == 0:
             estilos_din.append(("BACKGROUND", (0, i), (-1, i), _GRIS_CLARO))
 
-    tbl = Table(filas, colWidths=[7 * cm, 10 * cm])            # ← antes [5.5, 4.5, 7], ahora 2 columnas que suman 17cm
+    tbl = Table(filas, colWidths=[7 * cm, 10 * cm])
     base_cmds = [
         ("BACKGROUND",    (0, 0), (-1, 0),  _KUMON_AZUL),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  _BLANCO),
@@ -1248,8 +1252,8 @@ def _seccion_grafica_cualitativa(
 
 # BUG-08 FIX: etiquetas legibles para el orientador en tabla KPI
 _KPI_LABELS = {
-    "Cuantitativo": "Resultado del test (0–100)",
-    "Cualitativo":  "Actitud y comportamiento (0–100)",
+    "Cuantitativo": "Resultado del test",
+    "Cualitativo":  "Actitud ",
 }
 
 
@@ -1319,7 +1323,7 @@ def _seccion_combinada(styles: Dict, comb: Dict[str, Any]) -> list:
             contrib,
         ])
 
-    tbl_kpi = Table(kpi_rows, colWidths=[3.5 * cm, 2.2 * cm, 2 * cm, 2.5 * cm])
+    tbl_kpi = Table(kpi_rows, colWidths=[3.8 * cm, 1.8 * cm, 1.8 * cm, 1.8 * cm])
     tbl_kpi.setStyle(_tabla_base_style(len(kpi_rows)))
 
     if arco_img:
