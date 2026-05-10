@@ -27,6 +27,15 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           cd backend
+
+          # Ignorar binarios que HF rechaza en push normal
+          # (las fuentes las descarga el Dockerfile con wget)
+          echo "assets/fonts/" >> .gitignore
+          echo "*.ttf" >> .gitignore
+          echo "*.otf" >> .gitignore
+          echo "*.woff" >> .gitignore
+          echo "*.woff2" >> .gitignore
+
           git init
           git remote add hf https://Camilo723:$HF_TOKEN@huggingface.co/spaces/Camilo723/kumon-backend
           git add .
