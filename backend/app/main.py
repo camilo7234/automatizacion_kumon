@@ -164,4 +164,4 @@ app.include_router(cuestionario.router)
 @app.get("/health", tags=["infra"], include_in_schema=False)
 async def health() -> dict:
     return {"status": "ok", "version": app.version}    
-# keep-alive test
+
