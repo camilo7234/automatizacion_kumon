@@ -13,7 +13,7 @@
    Cambia solo aquí para apuntar a producción,
    staging o local sin tocar ningún otro archivo.
    ══════════════════════════════════════════════ */
-export const API_BASE = 'http://localhost:8000';
+export const API_BASE = 'https://camilo723-kumon-backend.hf.space';
 
 
 
