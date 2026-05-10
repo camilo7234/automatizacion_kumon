@@ -24,10 +24,10 @@ easyocr==1.7.1
 opencv-python==4.9.0.80
 # pillow>=10.3.0 — parchea CVE-2024-28219 (buffer overflow en ImageFont)
 pillow>=10.3.0
-# ★ FIX: numpy estaba duplicado con versiones distintas (>=1.24.0 y >=1.26.0)
-#   Se unifica en la versión mínima más alta para satisfacer AMBOS usos
-#   (video/imagen Y PDF/matplotlib).
-numpy>=1.26.0
+# ★ FIX: numpy<2.0 requerido — opencv-python 4.9.x fue compilado con
+#   NumPy 1.x y crashea con NumPy 2.x (AttributeError: _ARRAY_API not found).
+#   Se mantiene >=1.26.0 para satisfacer easyocr, librosa y matplotlib.
+numpy>=1.26.0,<2.0
 
 # ── Audio ──────────────────────────────────────────────────────────
 librosa>=0.10.0
