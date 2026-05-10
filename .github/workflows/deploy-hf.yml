@@ -28,6 +28,13 @@ jobs:
         run: |
           cd backend
 
+          git init
+          git remote add hf https://Camilo723:$HF_TOKEN@huggingface.co/spaces/Camilo723/kumon-backend
+
+          # Rescatar README actual del Space para no sobreescribirlo
+          git fetch hf main --depth=1
+          git checkout hf/main -- README.md 2>/dev/null || true
+
           # Ignorar binarios que HF rechaza en push normal
           # (las fuentes las descarga el Dockerfile con wget)
           echo "assets/fonts/" >> .gitignore
@@ -36,8 +43,6 @@ jobs:
           echo "*.woff" >> .gitignore
           echo "*.woff2" >> .gitignore
 
-          git init
-          git remote add hf https://Camilo723:$HF_TOKEN@huggingface.co/spaces/Camilo723/kumon-backend
           git add .
           git commit -m "deploy: ${{ github.sha }}"
           git push hf HEAD:main --force
