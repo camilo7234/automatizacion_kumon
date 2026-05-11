@@ -15,7 +15,7 @@
    ============================================================ */
 
 
-import { MSG }                            from './config.js';
+import { MSG, CONFIDENCE}                            from './config.js';
 import { getResult, getResultById}                      from './api.js';
 import { setResultData }                  from './state.js';
 import {
