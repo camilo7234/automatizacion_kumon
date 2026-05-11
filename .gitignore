@@ -115,3 +115,4 @@ llvmlite*.dll
 
 # Comprime tu entorno virtual localmente, nunca lo subas
 # En su lugar, usa requirements.txt
+hf-space/

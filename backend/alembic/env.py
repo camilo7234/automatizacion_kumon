@@ -47,6 +47,7 @@ from database.models import (  # noqa: F401
     ObservacionCualitativa,
     Bulletin,
     ProcessingError,
+    SignalFeedback,
 )
 from config.database import Base
 
@@ -62,7 +63,7 @@ config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 target_metadata = Base.metadata
 
 # ── Schemas que Alembic debe gestionar ───────────────────────────
-MANAGED_SCHEMAS = { "processing", }
+MANAGED_SCHEMAS = { "processing", "audit", "learning" }
 
 
 def include_object(object, name, type_, reflected, compare_to):
