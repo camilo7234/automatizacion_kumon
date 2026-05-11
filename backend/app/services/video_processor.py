@@ -86,9 +86,9 @@ WRITING_ROI_X2_PCT = 0.95
 WRITING_ROI_Y2_PCT = 0.90
 
 # Color naranja de la matriz "Diagnostic Test" en HSV
-ORANGE_HSV_LOWER = np.array([5, 80, 80])
-ORANGE_HSV_UPPER = np.array([32, 255, 255])
-ORANGE_MIN_AREA_PCT = 0.025
+ORANGE_HSV_LOWER = np.array([4, 40, 60])
+ORANGE_HSV_UPPER = np.array([35, 255, 255])
+ORANGE_MIN_AREA_PCT = 0.0004
 
 
 # ══════════════════════════════════════════════════════════════════
