@@ -96,7 +96,7 @@ class RespuestaCuestionarioRequest(BaseModel):
 
 
     respuestas: Dict[str, Any]
-    completado_por: str = Field(min_length=2, description="Nombre del orientador")
+    completado_por: Optional[str] = Field(default=None, description="Nombre del orientador")
     observacion_libre: Optional[str] = None
     correcciones_orientador: Dict[str, Any] = Field(default_factory=dict)
 
@@ -133,10 +133,12 @@ class RespuestaCuestionarioRequest(BaseModel):
 
     @field_validator("completado_por")
     @classmethod
-    def normalizar_orientador(cls, v: str) -> str:
+    def normalizar_orientador(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
         v = v.strip()
         if len(v) < 2:
-            raise ValueError("completado_por debe tener al menos 2 caracteres")
+            return None
         return v
 
 
