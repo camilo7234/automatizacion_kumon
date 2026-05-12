@@ -596,6 +596,28 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
         # incluso si el objeto bulletin estaba cacheado en la sesión actual.
         db.refresh(bulletin)
         datos = bulletin.datos_boletin
+
+        # CC FIX: fusionar campos frescos del orientador que pueden haber
+        # cambiado con PATCH sin que se haya regenerado el boletín completo.
+        # Esto soluciona imagen + PDF que muestran valores originales del
+        # video en vez de la calificación final validada por el orientador.
+        # Import local para no romper entornos sin SQLAlchemy activo.
+        from sqlalchemy.orm.attributes import flag_modified
+        cual_toca = datos.get("cualitativo", {}).copy()
+        campos_truth = {
+            "observacion_libre":      obs.observacion_libre or None,
+            "corrections_orientador": obs.correcciones_orientador or {},
+            "completado_por":         obs.completado_por or None,
+        }
+        # Camps orientador sobrescriben valores guardados — son la verdad final.
+        cual_toca.update(campos_truth)
+        datos["cualitativo"] = cual_toca
+        bulletin.datos_boletin = datos
+        # Sin flag_modified, SQLAlchemy no detecta mutación en campo JSON y
+        # el UPDATE nunca llega a la BD → el fix queda solo en memoria.
+        flag_modified(bulletin, "datos_boletin")
+        db.commit()
+
         return BoletinResponse(
             boletin_id=bulletin.id_bulletin,
             result_id=result.id_result,
@@ -609,7 +631,6 @@ def get_boletin(result_id: UUID, db: Session = Depends(get_db)):
             gaze=datos.get("gaze"),
             message="Boletín generado correctamente.",
         )
-
     # ── Generación: solo llega aquí si bulletin no existe o no tiene datos ──
     qual = _get_qualitative_result(db, result)
 
