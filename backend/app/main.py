@@ -28,7 +28,7 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
+
 
 from app.routes import upload, jobs, results, cuestionario
 from app.services.ocr_service import initialize_ocr_reader
@@ -67,7 +67,8 @@ _base_origins: list[str] = [
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://localhost:3000",   # React dev server (futuro)
-    "http://localhost:8080",   # Vue dev server (futuro)
+    "http://localhost:8080",
+    "https://automatizacion-kumon.camilorubio723.workers.dev",   # Vue dev server (futuro)
 ]
 
 _extra = os.getenv("CORS_EXTRA_ORIGINS", "")
@@ -119,14 +120,8 @@ app = FastAPI(
 # ================================================================
 
 # ── ORDEN DE MIDDLEWARE (se aplican de abajo hacia arriba) ──────
-
-# 1. TrustedHostMiddleware
-_trusted_hosts_env = os.getenv("TRUSTED_HOSTS", "localhost,127.0.0.1")
-_trusted_hosts: list[str] = [
-    h.strip() for h in _trusted_hosts_env.split(",") if h.strip()
-]
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=_trusted_hosts)
-
+# TrustedHostMiddleware eliminado: HF Spaces gestiona la capa de red
+# vía proxy inverso. CORS con lista explícita de origins es suficiente.
 # 2. CORS
 app.add_middleware(
     CORSMiddleware,
