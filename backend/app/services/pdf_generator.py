@@ -728,7 +728,7 @@ def generate_pdf(
         story.append(Spacer(1, 0.3 * cm))
 
     # ── [10] Valoración cualitativa ───────────────────────────────
-    story += _seccion_cualitativa(styles, cual)
+    story += _seccion_cualitativa(styles, cual, cuant=cuant)
     story.append(Spacer(1, 0.35 * cm))
 
     # ── [11] Gráfica de actitud ───────────────────────────────────
@@ -1630,23 +1630,16 @@ def _seccion_pie(
 # Retorna io.BytesIO listo para StreamingResponse.
 # ══════════════════════════════════════════════════════════════════
 
-def _generar_imagen_cualitativa(
+def generar_imagen_cualitativa(
     cual:          Dict[str, Any],
     nombre_sujeto: str = "—",
     fecha_str:     str = "—",
+    cuant:         Optional[Dict[str, Any]] = None,
 ) -> io.BytesIO:
     """
     Imagen PNG de la valoración cualitativa Kumon.
-    Dimensiones: ancho fijo 900px, alto dinámico según número de áreas.
-
-    Estructura visual:
-      1. Encabezado — nombre del alumno + fecha
-      2. Badge global — etiqueta + puntaje total + barra
-      3. Bloque por dimension — nombre, descripcion, barra coloreada
-      4. Observacion del orientador (si existe)
-      5. Pie — Kumon Ipiales
-
-    Sin fuentes de captura, sin señales automáticas, sin correcciones técnicas.
+    Incluye: valores cualitativos por área con badge de color,
+    observaciones del orientador, y frase automática del semáforo.
     """
     secciones         = cual.get("secciones") or []
     etiqueta          = cual.get("etiqueta_total") or ""
@@ -1655,13 +1648,20 @@ def _generar_imagen_cualitativa(
     observacion_libre = (cual.get("observacion_libre") or "").strip()
     completado_por    = (cual.get("completado_por") or "").strip()
 
+    # Datos cuantitativos para la frase del semáforo
+    _cuant       = cuant or {}
+    semaforo     = (_cuant.get("semaforo") or "").strip().lower()
+    frase_sem    = _SEM_TEXTO.get(semaforo, "")
+    recomendacion = (_cuant.get("recommendation") or "").strip()
+
     n = len(secciones)
 
-    # Alto dinámico: encabezado + badge + dimensiones + observación (escala con longitud)
+    # Alto dinámico ajustado: +1.0 por frase semáforo si existe
     fig_h = (
         3.5
-        + n * 1.4
-        + (1.4 + len(observacion_libre) / 120 if observacion_libre else 0)
+        + n * 1.6
+        + (1.0 if frase_sem else 0)
+        + (1.6 + len(observacion_libre) / 100 if observacion_libre else 0)
     )
     fig_w = 10
 
@@ -1671,147 +1671,188 @@ def _generar_imagen_cualitativa(
 
     y = 0.97
 
-    def _fraccion_h(pulgadas: float) -> float:
+    def _fh(pulgadas: float) -> float:
         return pulgadas / fig_h
 
     def _draw_text(txt, x, yy, size=10, bold=False, color="#1E293B",
                    ha="left", va="top"):
-        weight = "bold" if bold else "normal"
         ax.text(x, yy, txt, transform=ax.transAxes,
-                fontsize=size, fontweight=weight, color=color,
-                ha=ha, va=va, clip_on=False)
+                fontsize=size, fontweight="bold" if bold else "normal",
+                color=color, ha=ha, va=va, clip_on=False)
 
     def _draw_bar(yy, pct, color_hex, height_frac=0.018):
-        bar_x = 0.04
-        bar_w = 0.92
+        bar_x, bar_w = 0.04, 0.92
         ax.add_patch(plt.Rectangle(
             (bar_x, yy - height_frac), bar_w, height_frac,
-            transform=ax.transAxes, color="#E8F0FB",
-            clip_on=False, zorder=2,
+            transform=ax.transAxes, color="#E8F0FB", clip_on=False, zorder=2,
         ))
-        fill_w = bar_w * min(pct, 100) / 100
-        ax.add_patch(plt.Rectangle(
-            (bar_x, yy - height_frac), fill_w, height_frac,
-            transform=ax.transAxes, color=color_hex,
-            clip_on=False, zorder=3,
-        ))
+        fill_w = bar_w * min(max(pct, 0), 100) / 100
+        if fill_w > 0:
+            ax.add_patch(plt.Rectangle(
+                (bar_x, yy - height_frac), fill_w, height_frac,
+                transform=ax.transAxes, color=color_hex, clip_on=False, zorder=3,
+            ))
 
-    def _draw_hline(yy, alpha=0.25):
+    def _draw_hline(yy):
         ax.axhline(y=yy, xmin=0.03, xmax=0.97,
-                   color="#CBD5E1", linewidth=0.8,
-                   alpha=alpha, clip_on=False)
+                   color="#CBD5E1", linewidth=0.6, alpha=0.4, clip_on=False)
 
-    def _draw_section_header(yy, titulo, bg="#F1F5F9", fg="#003087"):
+    def _draw_badge(yy, texto, bg_hex, fg_hex, ancho_izq=0.04, ancho_der=0.96):
+        ancho = ancho_der - ancho_izq
+        alto  = _fh(0.30)
         ax.add_patch(plt.Rectangle(
-            (0.03, yy - _fraccion_h(0.30)), 0.94, _fraccion_h(0.30),
-            transform=ax.transAxes, color=bg,
-            clip_on=False, zorder=1,
+            (ancho_izq, yy - alto), ancho, alto,
+            transform=ax.transAxes, color=bg_hex, clip_on=False, zorder=2,
         ))
-        _draw_text(titulo, 0.05, yy - _fraccion_h(0.04),
-                   size=9, bold=True, color=fg)
-        return yy - _fraccion_h(0.40)
+        _draw_text(texto, (ancho_izq + ancho_der) / 2, yy - _fh(0.05),
+                   size=8.5, bold=True, color=fg_hex, ha="center")
+        return yy - alto - _fh(0.06)
 
-    # ── 1. Encabezado ─────────────────────────────────────────────
+    # ── 1. Encabezado azul ────────────────────────────────────────
     ax.add_patch(plt.Rectangle(
-        (0, y - _fraccion_h(0.7)), 1, _fraccion_h(0.7),
+        (0, y - _fh(0.75)), 1, _fh(0.75),
         transform=ax.transAxes, color="#003087", clip_on=False, zorder=1,
     ))
     _draw_text("VALORACION CUALITATIVA — ACTITUD Y COMPORTAMIENTO",
-               0.5, y - _fraccion_h(0.08),
-               size=12, bold=True, color="#FFFFFF", ha="center")
-    _draw_text(f"{nombre_sujeto}   -   Fecha: {fecha_str}",
-               0.5, y - _fraccion_h(0.38),
-               size=9, color="#BFD7FF", ha="center")
+               0.5, y - _fh(0.08), size=12, bold=True, color="#FFFFFF", ha="center")
+    _draw_text(f"{nombre_sujeto}   |   Fecha: {fecha_str}",
+               0.5, y - _fh(0.38), size=9, color="#BFD7FF", ha="center")
     _draw_text("Metodo Kumon — Ipiales",
-               0.5, y - _fraccion_h(0.60),
-               size=7.5, color="#7BA7D4", ha="center")
-    y -= _fraccion_h(0.85)
+               0.5, y - _fh(0.62), size=7.5, color="#7BA7D4", ha="center")
+    y -= _fh(0.90)
 
-    # ── 2. Badge global ───────────────────────────────────────────
-    color_global = _ETIQ_MPL_BG.get(etiqueta, "#3B82F6")
+    # ── 2. Badge global (color sólido con suficiente opacidad) ────
+    color_bg_global = {
+        "fortaleza":     "#DCFCE7",
+        "en_desarrollo": "#DBEAFE",
+        "refuerzo":      "#FEF9C3",
+        "atencion":      "#FEE2E2",
+    }.get(etiqueta, "#E8F0FB")
+    color_fg_global = {
+        "fortaleza":     "#166534",
+        "en_desarrollo": "#1E40AF",
+        "refuerzo":      "#92400E",
+        "atencion":      "#991B1B",
+    }.get(etiqueta, "#003087")
+
+    alto_badge = _fh(0.55)
     ax.add_patch(plt.Rectangle(
-        (0.03, y - _fraccion_h(0.55)), 0.94, _fraccion_h(0.55),
-        transform=ax.transAxes, color=color_global,
-        alpha=0.15, clip_on=False, zorder=1,
+        (0.03, y - alto_badge), 0.94, alto_badge,
+        transform=ax.transAxes, color=color_bg_global, clip_on=False, zorder=1,
     ))
-    _draw_text(f"Nivel general de actitud:  {etiq_lbl}  —  {pct_total:.1f}%",
-               0.5, y - _fraccion_h(0.1),
-               size=11, bold=True, color=color_global, ha="center")
-    y -= _fraccion_h(0.38)
-    _draw_bar(y, pct_total, color_global, height_frac=_fraccion_h(0.22))
-    y -= _fraccion_h(0.42)
+    _draw_text(f"Nivel general:  {etiq_lbl}  —  {pct_total:.1f}%",
+               0.5, y - _fh(0.10),
+               size=11, bold=True, color=color_fg_global, ha="center")
+    y -= _fh(0.38)
+    _draw_bar(y, pct_total, color_fg_global, height_frac=_fh(0.22))
+    y -= _fh(0.45)
     _draw_hline(y)
-    y -= _fraccion_h(0.18)
+    y -= _fh(0.20)
 
-    # ── 3. Bloque por dimension ───────────────────────────────────
+    # ── 2b. Frase automática del semáforo ─────────────────────────
+    if frase_sem:
+        color_sem_bg = {
+            "verde":    "#DCFCE7",
+            "amarillo": "#FEF9C3",
+            "rojo":     "#FEE2E2",
+        }.get(semaforo, "#E8F0FB")
+        color_sem_fg = {
+            "verde":    "#166534",
+            "amarillo": "#92400E",
+            "rojo":     "#991B1B",
+        }.get(semaforo, "#003087")
+        y = _draw_badge(y, frase_sem, color_sem_bg, color_sem_fg)
+        _draw_hline(y)
+        y -= _fh(0.20)
+
+    # ── 3. Bloque por dimensión con badge de etiqueta ─────────────
     for sec in secciones:
-        nombre = (
-            sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Area"
-        ).strip()
-
+        nombre = (sec.get("nombre") or sec.get("titulo") or sec.get("name") or "Area").strip()
         etiq_s = sec.get("etiqueta") or ""
 
-        # FIX Bug-falsy: extraer pct con None explícito para no perder 0%
         pct_raw = sec.get("porcentaje")
         if pct_raw is None:
             pct_raw = sec.get("puntaje")
         pct_s = float(pct_raw) if pct_raw is not None else 0.0
 
         lbl_s = _ETIQ_LABEL.get(etiq_s, etiq_s.replace("_", " ").capitalize())
-        fg_s  = _ETIQ_MPL_BG.get(etiq_s, "#3B82F6")
 
-        # FIX Bug-desc: buscar por clave exacta primero, luego por substring
+        # Colores PASTEL — consistentes con el PDF
+        bg_s = {
+            "fortaleza":     "#DCFCE7",
+            "en_desarrollo": "#DBEAFE",
+            "refuerzo":      "#FEF9C3",
+            "atencion":      "#FEE2E2",
+        }.get(etiq_s, "#E8F0FB")
+        fg_s = {
+            "fortaleza":     "#166534",
+            "en_desarrollo": "#1E40AF",
+            "refuerzo":      "#92400E",
+            "atencion":      "#991B1B",
+        }.get(etiq_s, "#003087")
+        # Color sólido solo para la barra de progreso
+        bar_color = {
+            "fortaleza":     "#16A34A",
+            "en_desarrollo": "#2563EB",
+            "refuerzo":      "#CA8A04",
+            "atencion":      "#DC2626",
+        }.get(etiq_s, "#3B82F6")
+
+        # Nombre del área
+        _draw_text(nombre, 0.04, y, size=10, bold=True, color="#003087")
+        y -= _fh(0.28)
+
+        # Badge de etiqueta cualitativa con fondo de color pastel
+        y = _draw_badge(y, f"{lbl_s}  ·  {pct_s:.0f}%", bg_s, fg_s,
+                        ancho_izq=0.04, ancho_der=0.55)
+
+        # Descripción de la dimensión
         desc = _KUMON_DIMENSION_DESC.get(nombre.lower(), "")
         if not desc:
-            nombre_lower = nombre.lower()
             for clave, texto in _KUMON_DIMENSION_DESC.items():
-                if clave in nombre_lower or nombre_lower in clave:
+                if clave in nombre.lower() or nombre.lower() in clave:
                     desc = texto
                     break
-
-        _draw_text(nombre, 0.04, y, size=10, bold=True, color="#003087")
-        _draw_text(f"{lbl_s}  {pct_s:.0f}%",
-                   0.96, y, size=9, bold=True, color=fg_s, ha="right")
-        y -= _fraccion_h(0.28)
-
         if desc:
             _draw_text(desc, 0.04, y, size=8, color="#475569")
-            y -= _fraccion_h(0.25)
+            y -= _fh(0.26)
 
-        _draw_bar(y, pct_s, fg_s, height_frac=_fraccion_h(0.20))
-        y -= _fraccion_h(0.35)
+        # Barra de progreso (color sólido)
+        _draw_bar(y, pct_s, bar_color, height_frac=_fh(0.20))
+        y -= _fh(0.35)
         _draw_hline(y)
-        y -= _fraccion_h(0.15)
+        y -= _fh(0.18)
 
-    # ── 4. Observacion del orientador ─────────────────────────────
-    # C-4 FIX: solo dibujar el bloque si hay texto real (no solo espacios).
+    # ── 4. Observación del orientador ────────────────────────────
     if observacion_libre:
-        y -= _fraccion_h(0.10)
-        y = _draw_section_header(y, "Observacion del orientador",
-                                 bg="#EFF6FF", fg="#1D4ED8")
-        bloque_h = max(_fraccion_h(0.90), _fraccion_h(0.30 + len(observacion_libre) / 120))
+        y -= _fh(0.12)
+        # Encabezado sección
+        ax.add_patch(plt.Rectangle(
+            (0.03, y - _fh(0.32)), 0.94, _fh(0.32),
+            transform=ax.transAxes, color="#EFF6FF", clip_on=False, zorder=1,
+        ))
+        _draw_text("Observacion del orientador", 0.05, y - _fh(0.05),
+                   size=9, bold=True, color="#1D4ED8")
+        y -= _fh(0.42)
+
+        # Cuerpo de la observación
+        bloque_h = max(_fh(0.90), _fh(0.30) + _fh(len(observacion_libre) / 100))
         ax.add_patch(plt.Rectangle(
             (0.03, y - bloque_h), 0.94, bloque_h,
-            transform=ax.transAxes, color="#EFF6FF",
-            clip_on=False, zorder=1,
+            transform=ax.transAxes, color="#EFF6FF", clip_on=False, zorder=1,
         ))
-        _draw_text(observacion_libre, 0.05, y - _fraccion_h(0.08),
+        _draw_text(observacion_libre, 0.05, y - _fh(0.08),
                    size=8.5, color="#1E3A5F")
-
-        # C-7 FIX: cuando haya observación, mostrar también quién la registró.
         if completado_por:
             _draw_text(f"Registrado por: {completado_por}",
-                       0.05, y - _fraccion_h(0.30),
-                       size=7.5, color="#64748B")
-
-        y -= bloque_h + _fraccion_h(0.15)
+                       0.05, y - _fh(0.32), size=7.5, color="#64748B")
+        y -= bloque_h + _fh(0.15)
         _draw_hline(y)
-        y -= _fraccion_h(0.15)
+        y -= _fh(0.15)
 
     # ── 5. Pie ────────────────────────────────────────────────────
-    _draw_text("Kumon Ipiales  -  Boletin de Diagnostico",
-               0.5, _fraccion_h(0.12),
-               size=7.5, color="#94A3B8", ha="center")
+    _draw_text("Kumon Ipiales  ·  Boletin de Diagnostico",
+               0.5, _fh(0.10), size=7.5, color="#94A3B8", ha="center")
 
     plt.tight_layout(pad=0)
     buf = io.BytesIO()

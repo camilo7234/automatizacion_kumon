@@ -1369,7 +1369,7 @@ def get_imagen_cualitativa(result_id: UUID, db: Session = Depends(get_db)):
 
     # Importación local para no romper entornos sin matplotlib
     try:
-        from app.services.pdf_generator import _generar_imagen_cualitativa
+        from app.services.pdf_generator import generar_imagen_cualitativa
     except ImportError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1379,10 +1379,11 @@ def get_imagen_cualitativa(result_id: UUID, db: Session = Depends(get_db)):
     nombre_sujeto = cuant.get("nombre_sujeto") or "—"
     fecha_str     = cuant.get("test_date") or "—"
 
-    img_buffer = _generar_imagen_cualitativa(
+    img_buffer = generar_imagen_cualitativa(
         cual=cual,
         nombre_sujeto=nombre_sujeto,
         fecha_str=fecha_str,
+        cuant=cuant,
     )
 
     # Normalizar mínimamente el nombre de archivo para evitar caracteres problemáticos
